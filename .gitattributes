@@ -1,0 +1,9 @@
+# 钉死换行符，避免在 Windows 上克隆时把整份文件标成改动。
+# 仓库里存 LF；Windows 检出时也是 LF（这些是 .js/.py/.html，工具链都吃得下）。
+* text=auto eol=lf
+
+# 二进制，别做换行转换，也别在 diff 里显示成文本
+*.xls  binary
+*.png  binary
+*.jpg  binary
+*.ico  binary

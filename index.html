@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>国考选岗器 · 2027年度职位检索</title>
+<meta name="description" content="按自己的报考条件筛选 2027 年国考职位，逐条给出匹配依据。全程离线运行。">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- 载入遮罩：先在 HTML 里，数据脚本后注入，保证用户先看到它而不是白屏 -->
+<div class="loading" id="loading" role="status" aria-live="polite">
+  <p class="loading__title">正在调取职位表</p>
+  <div class="loading__bar"></div>
+  <p class="loading__hint" id="loading-hint">解压 19,426 个职位 …</p>
+</div>
+
+<header class="masthead">
+  <div class="masthead__inner">
+    <p class="masthead__eyebrow">2027 年度考试录用公务员</p>
+    <h1 class="masthead__title">国家公务员考试 · 职位检索</h1>
+    <div class="masthead__rule"></div>
+    <p class="masthead__meta" id="masthead-meta">数据来源：2027年国考职位表（全国）</p>
+    <div class="masthead__actions">
+      <button class="btn" id="btn-print" type="button">打印 / 存 PDF</button>
+      <button class="btn" id="btn-csv" type="button">导出 CSV</button>
+      <button class="btn" id="btn-reset" type="button">清空条件</button>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+
+  <!-- ================= 左侧：报考条件申报表 ================= -->
+  <aside class="rail" aria-label="报考条件">
+    <h2 class="declaration__title">报考条件</h2>
+    <p class="declaration__sub">条件即时生效，无需提交</p>
+
+    <!-- 学历学位 -->
+    <details class="group" open>
+      <summary class="group__head">学历 · 学位 · 届别</summary>
+      <div class="row">
+        <label class="row__label" for="f-level">学历</label>
+        <div class="row__control">
+          <select id="f-level">
+            <option value="大专">大专</option>
+            <option value="本科" selected>本科</option>
+            <option value="硕士">硕士研究生</option>
+            <option value="博士">博士研究生</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-degree">学位</label>
+        <div class="row__control">
+          <select id="f-degree">
+            <option value="无">无学位</option>
+            <option value="学士" selected>学士</option>
+            <option value="硕士">硕士</option>
+            <option value="博士">博士</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-gradyear">毕业年份</label>
+        <div class="row__control">
+          <select id="f-gradyear"></select>
+          <p class="hint" id="f-gradyear-hint"></p>
+        </div>
+      </div>
+    </details>
+
+    <!-- 本人情况：都是关于报考者自己的事实。
+         性别和英语等级虽然是从备注文本里提取的，但「我是男是女」「我过了几级英语」
+         跟学历、政治面貌是同一类东西，所以摆在这里；它们对应的规则另有开关，
+         见下面「备注中的要求」。 -->
+    <details class="group" open>
+      <summary class="group__head">本人情况</summary>
+      <div class="row">
+        <label class="row__label" for="f-politics">政治面貌</label>
+        <div class="row__control">
+          <select id="f-politics">
+            <option value="群众" selected>群众</option>
+            <option value="共青团员">共青团员</option>
+            <option value="中共预备党员">中共预备党员</option>
+            <option value="中共党员">中共党员</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <span class="row__label">性别</span>
+        <div class="row__control">
+          <div class="checks" id="f-gender">
+            <label class="check"><input type="radio" name="gender" value="不限" checked> 不限</label>
+            <label class="check"><input type="radio" name="gender" value="男"> 男</label>
+            <label class="check"><input type="radio" name="gender" value="女"> 女</label>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-english">英语等级</label>
+        <div class="row__control">
+          <select id="f-english">
+            <option value="" selected>不填 / 不限</option>
+            <option value="无">未通过四级</option>
+            <option value="四级">已过四级</option>
+            <option value="六级">已过六级</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-years">基层年限</label>
+        <div class="row__control">
+          <select id="f-years">
+            <option value="0" selected>无基层工作经历</option>
+            <option value="1">一年</option>
+            <option value="2">二年</option>
+            <option value="3">三年</option>
+            <option value="5">五年以上</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <span class="row__label">基层项目</span>
+        <div class="row__control">
+          <div class="checks" id="f-services"></div>
+          <p class="hint">勾选你已服务期满且考核合格的项目</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- 专业：本工具的核心 -->
+    <details class="group" open>
+      <summary class="group__head">所学专业</summary>
+      <div class="row">
+        <label class="row__label" for="f-major">专业名称</label>
+        <div class="row__control">
+          <input type="text" id="f-major" placeholder="如 数据科学与大数据技术" autocomplete="off">
+        </div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-codes">专业代码</label>
+        <div class="row__control">
+          <input type="text" id="f-codes" placeholder="如 080910T，可留空" autocomplete="off">
+          <p class="hint" id="f-major-sugg"></p>
+        </div>
+      </div>
+      <div class="row">
+        <span class="row__label">专业类目</span>
+        <div class="row__control">
+          <div class="chips" id="f-lei-chips"></div>
+          <div class="leipicker">
+            <div class="leipicker__head">
+              <span class="leipicker__title">全部类目</span>
+              <input type="search" class="leipicker__search" id="f-lei-search" placeholder="搜索，如 计算机" autocomplete="off">
+            </div>
+            <div class="leipicker__list" id="f-lei-list"></div>
+          </div>
+          <p class="hint">按《专业参考目录》勾选你专业所属的类目。留空则只按名称与代码匹配。</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- 备注类规则与附加条件 -->
+    <details class="group">
+      <summary class="group__head">备注中的要求</summary>
+      <div class="row">
+        <span class="row__label">规则</span>
+        <div class="row__control">
+          <div class="checks">
+            <label class="check"><input type="checkbox" id="f-rule-fresh" checked> 按应届身份排除</label>
+            <label class="check"><input type="checkbox" id="f-rule-gender" checked> 按性别排除</label>
+            <label class="check"><input type="checkbox" id="f-rule-english" checked> 按英语排除</label>
+          </div>
+          <p class="hint">这三条要从备注的中文里读出来，可能有误。取消勾选即只提示、不排除。</p>
+        </div>
+      </div>
+      <div class="row">
+        <span class="row__label">附加条件</span>
+        <div class="row__control">
+          <div class="checks" id="f-exclude"></div>
+          <p class="hint">这些是岗位自带的负担或限制，跟你的资格无关。勾选即整个排除。</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- 意向 -->
+    <details class="group">
+      <summary class="group__head">意向岗位</summary>
+      <div class="row">
+        <span class="row__label">工作省份</span>
+        <div class="row__control">
+          <div class="chips" id="f-prov-chips"></div>
+          <div class="leipicker">
+            <div class="leipicker__head">
+              <span class="leipicker__title">省份</span>
+              <input type="search" class="leipicker__search" id="f-prov-search" placeholder="搜索" autocomplete="off">
+            </div>
+            <div class="leipicker__list" id="f-prov-list"></div>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <span class="row__label">机构层级</span>
+        <div class="row__control"><div class="checks" id="f-levels"></div></div>
+      </div>
+      <div class="row">
+        <span class="row__label">考试类别</span>
+        <div class="row__control"><div class="checks" id="f-exams"></div></div>
+      </div>
+      <div class="row">
+        <span class="row__label">职位属性</span>
+        <div class="row__control"><div class="checks" id="f-attrs"></div></div>
+      </div>
+      <div class="row">
+        <span class="row__label">招录类别</span>
+        <div class="row__control"><div class="checks" id="f-categories"></div></div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-headcount">招考人数</label>
+        <div class="row__control">
+          <select id="f-headcount">
+            <option value="0" selected>不限</option>
+            <option value="2">2 人及以上</option>
+            <option value="3">3 人及以上</option>
+            <option value="5">5 人及以上</option>
+            <option value="10">10 人及以上</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-ratio">面试比例</label>
+        <div class="row__control">
+          <select id="f-ratio">
+            <option value="" selected>不限</option>
+          </select>
+          <p class="hint">比例越小，进面名额相对越多</p>
+        </div>
+      </div>
+    </details>
+
+    <p class="hint" style="margin-top:18px">
+      条件自动保存在本机浏览器，下次打开仍在。所有匹配都可能与招录机关的解释有出入，
+      结果仅供筛选参考。
+    </p>
+  </aside>
+
+  <!-- ================= 右侧：结果 ================= -->
+  <main class="results" id="results">
+
+    <section class="tally" aria-label="筛选结果概览">
+      <div class="tally__item">
+        <span class="tally__label">可报职位</span>
+        <span class="tally__value tally__value--accent" id="tally-count">—</span>
+      </div>
+      <div class="tally__item">
+        <span class="tally__label">招录人数</span>
+        <span class="tally__value" id="tally-people">—</span>
+      </div>
+      <div class="tally__item">
+        <span class="tally__label">专业精准命中</span>
+        <span class="tally__value" id="tally-exact">—</span>
+      </div>
+      <p class="tally__aside" id="tally-aside"></p>
+    </section>
+
+    <div class="notices" id="notices"></div>
+
+    <div class="toolbar">
+      <input type="search" class="toolbar__search" id="f-search"
+             placeholder="搜部门、职位、代码、地点" autocomplete="off">
+      <label class="toolbar__label" for="f-sort">排序</label>
+      <select id="f-sort" style="width:auto;min-width:110px">
+        <option value="tier" selected>按匹配档位</option>
+        <option value="headcount">按招考人数</option>
+        <option value="dept">按部门名称</option>
+        <option value="place">按工作地点</option>
+      </select>
+      <span class="toolbar__spacer"></span>
+      <label class="toolbar__label"><input type="checkbox" id="f-onlysaved"> 只看收藏</label>
+    </div>
+
+    <nav class="tiers" id="tiers" aria-label="匹配档位筛选"></nav>
+
+    <div id="groups"></div>
+
+    <section class="dist" id="dist" hidden>
+      <div class="dist__head">
+        <span class="dist__title">结果分布</span>
+        <div class="dist__tabs" id="dist-tabs"></div>
+      </div>
+      <div class="dist__body" id="dist-body"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ================= 收藏抽屉 ================= -->
+<div class="drawer" id="drawer">
+  <div class="drawer__bar" id="drawer-bar" role="button" tabindex="0" aria-expanded="false">
+    <span class="drawer__star">★</span>
+    <span>已收藏 <span class="drawer__count" id="drawer-count">0</span> 个职位</span>
+    <span class="drawer__toggle" id="drawer-toggle">展开对比</span>
+  </div>
+  <div class="drawer__body" id="drawer-body"></div>
+</div>
+
+<p class="sr-only" id="live" aria-live="polite"></p>
+
+<script src="match.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

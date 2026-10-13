@@ -1,0 +1,14 @@
+# 操作系统 / 编辑器垃圾
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
+
+# Python 构建脚本的缓存（build_data.py / oracle.py 用）
+__pycache__/
+*.pyc
+
+# 注意：以下两个大文件是**故意提交**的，不要加进来
+#   2027年国考职位表（全国）.xls   9.3 MB  数据源头，重建靠它
+#   data/positions.js              4.6 MB  构建产物，提交后克隆下来双击就能用
