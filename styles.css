@@ -67,6 +67,14 @@ a:hover { border-bottom-color: var(--indigo); }
   outline-offset: 2px;
 }
 
+/* 元素上的 hidden 属性，只有浏览器默认样式表里的 `[hidden] { display: none }` 撑着。
+   作者样式表里任何一条带 display 的类选择器都能把它盖掉（作者样式优先于默认样式，
+   不比权重），于是 JS 里 row.hidden = true 设了个寂寞——属性在，元素照旧显示。
+   类目选择器的搜索框就是这么哑掉的：182 个类目里 179 个的 hidden 已经置位，
+   屏幕上却一个也没藏住。这类漏子在本文件里已经踩过三次（.loading / .card__remark / .lei），
+   所以不再逐处打补丁，改在重置区一刀兜住。 */
+[hidden] { display: none !important; }
+
 /* --------------------------------------------------------------------------
    2. 载入
    -------------------------------------------------------------------------- */
@@ -81,7 +89,6 @@ a:hover { border-bottom-color: var(--indigo); }
   gap: 18px;
   background: var(--paper);
 }
-.loading[hidden] { display: none; }
 .loading__title {
   font-family: var(--serif);
   font-size: 22px;
@@ -570,7 +577,6 @@ mark {
   word-break: break-word;
   white-space: pre-wrap;
 }
-.card__remark[hidden] { display: none; }
 .card__remark-title { display: block; color: var(--ink-faint); letter-spacing: .12em; margin-bottom: 3px; }
 
 /* 风险标签 */
