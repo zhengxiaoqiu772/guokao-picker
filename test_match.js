@@ -229,6 +229,43 @@ check('「2027年度」这种年度说法不算届别',
 
 check('「非应届高校毕业生」不算限应届',
       GK.analyzeRemark('非应届高校毕业生报考,需2年工作经历', '其他职位').indexOf('fresh') < 0, true);
+
+// 裸的「应届高校毕业生」独立成句时就是限应届。税务系统全表 1,473 行这么写，
+// 性别和应届并列、谁也不带限定动词，先前只认「限应届」时整批漏标。
+check('裸写「应届高校毕业生」独句成行算限应届',
+      GK.analyzeRemark('应届高校毕业生,男性,在本单位最低服务年限为5年', '其他职位').indexOf('fresh') >= 0, true);
+check('裸写「应届毕业生」（不带「高校」）也算',
+      GK.analyzeRemark('应届毕业生,最低服务年限5年', '其他职位').indexOf('fresh') >= 0, true);
+check('「限2027年应届高校毕业生」算限应届（动词后隔了年份）',
+      GK.analyzeRemark('限' + thisYear + '年应届高校毕业生,同时取得学历学位', '其他职位').indexOf('fresh') >= 0, true);
+check('「该职位限招应届高校毕业生」算限应届',
+      GK.analyzeRemark('该职位限招应届高校毕业生', '其他职位').indexOf('fresh') >= 0, true);
+// 但同一组字换个位置意思就反了，这四条是边界，必须挡住
+check('「注明本人具有应届高校毕业生身份」不算限应届',
+      GK.analyzeRemark('如考生为应届高校毕业生,请在备注栏中注明本人具有应届高校毕业生身份', '其他职位')
+        .indexOf('fresh') < 0, true);
+check('「如考生为应届…非应届…」两身份并列不算限应届',
+      GK.analyzeRemark('1.应届高校毕业生需通过英语专业八级;如不是应届高校毕业生,需专职从事翻译工作2年以上', '其他职位')
+        .indexOf('fresh') < 0, true);
+check('「非应届高校毕业生应持有…」不算限应届',
+      GK.analyzeRemark('2,应届高校毕业生应在报名时同时具有合格证,非应届高校毕业生应持有执照', '其他职位')
+        .indexOf('fresh') < 0, true);
+check('「招考对象可为应届高校毕业生」不算限应届',
+      GK.analyzeRemark('招考对象可为应届高校毕业生', '其他职位').indexOf('fresh') < 0, true);
+
+// 用户报的那一行：国家税务总局湖北省税务局 南漳县税务局，备注「应届高校毕业生,男性,…」
+// 职位代码不唯一，所以连部门代码一起定位。这一行是裸写句式，先前完全没标签。
+const nanzhang = records.find((r) => r['职位代码'] === '300110044001' &&
+                                     r['部门代码'] === '130121');
+if (nanzhang) {
+  const nanzhangProfile = (g) => GK.buildProfile(Object.assign({}, BASE, {
+    level: '本科', majorText: '', majorCodes: '', classes: ['社会保障类'], gradYear: g,
+  }));
+  check('南漳县这行被打上 fresh 标签', nanzhang.tags.indexOf('fresh') >= 0, true);
+  check('南漳县这行：当年届可报', GK.matchRow(nanzhang, nanzhangProfile(String(thisYear))).ok, true);
+  check('南漳县这行：非应届被排除',
+        GK.matchRow(nanzhang, nanzhangProfile('earlier')).why, '限应届高校毕业生（备注，含择业期）');
+}
 check('「在本单位最低服务年限为5年」被识别',
       GK.analyzeRemark('在本单位最低服务年限为5年(含试用期)', '其他职位').indexOf('service5') >= 0, true);
 check('「服务期满,考核合格」不算最低服务期',

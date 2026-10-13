@@ -332,13 +332,18 @@
     for (let i = leeway.length - 2; i >= 0; i--) {
       opts.push([String(leeway[i]), leeway[i] + ' 届（择业期内）']);
     }
-    opts.push(['earlier', (leeway[0] - 1) + ' 届及更早（往届）']);
+    // 最后一项不写具体年份：'earlier' 在 match.js 里 gradYearNum = 0，两条应届规则都过不了，
+    // 行为就是纯粹的「非应届」。写成「2024 届及更早（往届）」反而把口径说窄了——
+    // 择业期一过，2024、2023、2022 届在这一点上没有任何区别，写出具体年份会让人以为
+    // 还得再对一次数字。值仍然是 'earlier'，老存档不用迁移。
+    opts.push(['earlier', '非应届']);
     $('f-gradyear').innerHTML = opts.map(function (o) {
       return '<option value="' + esc(o[0]) + '">' + esc(o[1]) + '</option>';
     }).join('');
     $('f-gradyear-hint').textContent =
       '写「限' + thisYear + '届高校毕业生」的职位只认当年应届；' +
-      '写「限应届高校毕业生」的职位，' + leeway[0] + '—' + thisYear + ' 届都在择业期内，都算应届。';
+      '写「限应届高校毕业生」的职位，' + leeway[0] + '—' + thisYear + ' 届都在择业期内，都算应届。' +
+      '选「非应届」则两类职位都会从结果里去掉。';
 
     // 表头
     $('masthead-meta').innerHTML = '数据来源：' + esc(DATA.meta.source) +
