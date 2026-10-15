@@ -288,6 +288,23 @@ check('「妇女等领域知识」不算限女性',
 check('西部地区从职位分布识别',
       GK.analyzeRemark('', '西部地区和艰苦边远地区职位').indexOf('west') >= 0, true);
 
+// 英语等级有整整一批写成阿拉伯数字，是外交部那批驻外岗位的标准句式，
+// 整条备注里汉字「四级/六级」一个都没有，早先全漏标（用户报的 200110002002 就是）。
+check('「大学英语4级成绩425分及以上」被识别为要求四级',
+      GK.analyzeRemark('大学英语4级成绩425分及以上(网上报名时,请在备注栏注明英语水平等级及分数)',
+                       '其他职位').indexOf('cet4') >= 0, true);
+check('「大学英语6级成绩425分及以上」被识别为要求六级',
+      GK.analyzeRemark('大学英语6级成绩425分及以上(网上报名时,请在备注栏注明英语水平等级及分数)',
+                       '其他职位').indexOf('cet6') >= 0, true);
+// 民航那批写的是「国际民航组织英语4级」，是飞行人员的 ICAO 等级，跟四级考试无关。
+// 只认「大学英语」这个前缀就是为了把它们挡在外面；放宽到裸的「英语4级」会误伤 4 行。
+check('「国际民航组织英语4级」不算要求四级',
+      GK.analyzeRemark('具备现行有效飞行人员国际民航组织英语4级及以上能力,未发生过运输航空责任原因一般征候',
+                       '其他职位').indexOf('cet4') < 0, true);
+check('「国际民航组织英语4级」不算要求六级',
+      GK.analyzeRemark('具备现行有效管制员国际民航组织英语4级及以上能力',
+                       '其他职位').indexOf('cet6') < 0, true);
+
 // --- 3.6 性别规则 ---
 const maleRec = pickTagged('male');
 check('存在满足硬条件的「限男性」职位', !!maleRec, true);
@@ -401,6 +418,31 @@ check('英语填「无」才因英语排除（六级岗）', whyOf(cet6Rec, { en
 check('填「四级」仍够不着六级岗', whyOf(cet6Rec, { english: '四级' }), '要求六级（备注）');
 check('填「六级」够得着六级岗', whyOf(cet6Rec, { english: '六级' }), '');
 check('填「四级」够得着四级岗', whyOf(cet4Rec, { english: '四级' }), '');
+
+// 用户实际报的那一行：外交部办公厅 200110002002。备注写的是「大学英语4级成绩425分
+// 及以上」，汉字「四级」一个都没有，早先整行没打标签，选「未通过四级」照样推上来。
+// 这里连着走一遍完整判定，而不只是查 analyzeRemark——标签打上了却接不到规则上，
+// 是另一回事。
+const waijiao = records.find((r) => r['职位代码'] === '200110002002' && r['部门代码'] === '102000');
+check('找到外交部 200110002002 这行', !!waijiao, true);
+if (waijiao) {
+  check('这行被打上 cet4 标签', waijiao.tags.indexOf('cet4') >= 0, true);
+  const wjProfile = (e) => GK.buildProfile(Object.assign({}, BASE, {
+    level: '本科', politics: '中共党员', years: 3, gradYear: String(thisYear),
+    majorText: '应急技术与管理', majorCodes: '082902T', classes: ['安全科学与工程类'], english: e,
+  }));
+  check('这行：英语留空时不排除', GK.matchRow(waijiao, wjProfile('')).why || '', '');
+  check('这行：选「未通过四级」被排除',
+        GK.matchRow(waijiao, wjProfile('无')).why, '有英语等级要求（备注）');
+  check('这行：选「已过四级」可报', GK.matchRow(waijiao, wjProfile('四级')).ok, true);
+  check('这行：选「已过六级」可报', GK.matchRow(waijiao, wjProfile('六级')).ok, true);
+}
+
+// 收口：选「未通过四级」之后，全表带英文标签的职位一个都不该留在结果里
+const engLeak = records.filter((r) =>
+  (r.tags.indexOf('cet4') >= 0 || r.tags.indexOf('cet6') >= 0) &&
+  GK.matchRow(r, easeProfile({ english: '无' })).ok);
+check('选「未通过四级」后没有带英文标签的职位漏网', engLeak.length, 0);
 
 // 汇总口径：留空应当既不排除，也不比「已过六级」多——空值就是纯弃权
 const engBase = Object.assign({}, BASE, {
