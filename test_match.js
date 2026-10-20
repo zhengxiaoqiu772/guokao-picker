@@ -555,6 +555,31 @@ check('填了专业后搜索只缩小结果集',
 const miss = GK.filterRecords(records, noMajor, { search: '不存在的岗位xyz' });
 check('搜不到时仍是检索模式、结果为 0', [miss.mode, miss.stats.total], ['search', 0]);
 
+// --- 3.15 附加条件 · 只看限当年届 ---
+// 收窄到备注明确写「2027届高校毕业生」的职位：
+// 「限应届高校毕业生」按指南含择业期、完全不提应往届的都不算。
+const cohortBase = Object.assign({}, BASE, {
+  level: '本科', majorText: '数据科学与大数据技术', majorCodes: '080910T', classes: ['计算机类'],
+});
+const cohortAll = GK.filterRecords(records, cohortBase, {}).stats.total;
+const onlyCohort = GK.filterRecords(records, Object.assign({}, cohortBase, { onlyCohort: true }), {});
+check('只看限2027届：结果全是备注限当年届的职位',
+      onlyCohort.all.every((r) => r.cohortReq.length === 1 && r.cohortReq[0] === 2027 &&
+                                   r.tags.indexOf('fresh') < 0), true);
+check('只看限2027届：1,358 个，比全量 2,681 收窄',
+      [onlyCohort.stats.total, cohortAll], [1358, 2681]);
+check('只看限2027届：排除原因可计数',
+      (onlyCohort.stats.excluded['不在「仅限2027届」范围'] || 0) > 0, true);
+
+// 这是用户显式勾的筛选，不归「按应届身份排除」管
+const cohortRuleOff = GK.filterRecords(records,
+  Object.assign({}, cohortBase, { onlyCohort: true, ruleFresh: false }), {});
+check('关掉「按应届身份排除」后，只看限届仍生效', cohortRuleOff.stats.total, 1358);
+
+const cohortMismatch = GK.filterRecords(records,
+  Object.assign({}, cohortBase, { gradYear: '2026', onlyCohort: true }), {});
+check('只看限2027届 + 毕业年份选 2026：结果必然为 0', cohortMismatch.stats.total, 0);
+
 /* =====================================================================
  * 四、性能
  * ===================================================================*/

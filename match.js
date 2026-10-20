@@ -628,6 +628,7 @@
     minHeadcount: 0,
     ratios: [],
     excludeTagKeys: [],                     // 用户显式勾选要排除的标签
+    onlyCohort: false,                      // 只看备注明确限当年届的职位
     ruleFresh: true,                        // 往届时排除「仅限应届」
     ruleGender: true,                       // 按性别排除
     ruleEnglish: true,                      // 按英语等级排除
@@ -725,6 +726,20 @@
 
     // --- 备注风险标签（依据备注，可开关，始终提示来源）---
     const tagSet = new Set(rec.tags);
+
+    // 「只看限当年届」是用户显式收窄，不挂在 ruleFresh 上——关掉「按应届身份排除」
+    // 也照样生效。只认 cohort 这一档：备注写「限应届高校毕业生」的按报名指南
+    // 含择业期（2025—2027 届），写「2027届高校毕业生」的才只收当年那一届；
+    // 完全不提应届的职位更是谁都收，三者不能混为一谈。
+    if (profile.onlyCohort) {
+      const need = rec.cohortReq || [];
+      const onlyThisCohort = need.length > 0 && !tagSet.has('fresh') &&
+        need.every(function (y) { return y === EXAM_COHORT_YEAR; });
+      if (!onlyThisCohort) {
+        return { ok: false, why: '不在「仅限' + EXAM_COHORT_YEAR + '届」范围' };
+      }
+    }
+
     if (profile.ruleFresh) {
       // 「限2027届高校毕业生」只认当年那届；「限应届高校毕业生」认择业期内两年
       const need = rec.cohortReq || [];

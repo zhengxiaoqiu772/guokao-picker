@@ -326,6 +326,10 @@
     // 毕业年份：届别是 unpack 时从数据里认出来的，所以选项也得现生成
     const thisYear = GK.examCohortYear();
     const leeway = GK.leewayYears();
+    // 「附加条件 · 只看限某届」里的年份同样现取，换一份新表不用改 HTML
+    Array.prototype.forEach.call(document.querySelectorAll('.js-cohort-year'), function (el) {
+      el.textContent = String(thisYear);
+    });
     // 侧栏只有 322px 宽，选项文字太长会把下拉箭头挤出去，所以标签从简，
     // 具体口径交给下面的提示行说
     const opts = [[String(thisYear), thisYear + ' 届（当年应届）']];
@@ -375,6 +379,7 @@
       minHeadcount: parseInt($('f-headcount').value, 10) || 0,
       ratios: $('f-ratio').value ? [$('f-ratio').value] : [],
       excludeTagKeys: chosen($('f-exclude')),
+      onlyCohort: $('f-only-cohort').checked,
       ruleFresh: $('f-rule-fresh').checked,
       ruleGender: $('f-rule-gender').checked,
       ruleEnglish: $('f-rule-english').checked,
@@ -402,6 +407,7 @@
     setChecked($('f-attrs'), p.attrs);
     setChecked($('f-categories'), p.categories);
     setChecked($('f-exclude'), p.excludeTagKeys);
+    $('f-only-cohort').checked = !!p.onlyCohort;
     if (pickers.classes) pickers.classes.set(p.classes);
     if (pickers.provinces) pickers.provinces.set(p.provinces);
     if (p.ratios && p.ratios.length) $('f-ratio').value = p.ratios[0];
@@ -542,6 +548,29 @@
     ruleNotice('ruleGender', '限女性（备注）', '限女性');
     ruleNotice('ruleEnglish', '有英语等级要求（备注）', '要求英语等级');
     ruleNotice('ruleEnglish', '要求六级（备注）', '要求英语六级');
+
+    // 「只看限当年届」是用户主动勾的收窄条件，排除量和退出入口都要说清楚，
+    // 否则结果一下少掉几千个，看着像工具算错了。
+    const onlyCohortWhy = '不在「仅限' + GK.examCohortYear() + '届」范围';
+    if (state.profile.onlyCohort) {
+      if (String(state.profile.gradYear) !== String(GK.examCohortYear())) {
+        out.push({
+          tone: 'info',
+          text: '你选的毕业年份不是 ' + GK.examCohortYear() + ' 届，' +
+                '而「只看限 ' + GK.examCohortYear() + ' 届」只留当年那一届的职位，' +
+                '两者对不上，结果必然是 0。',
+          action: { label: '取消这条', key: 'onlyCohort' },
+        });
+      }
+      if (ex[onlyCohortWhy]) {
+        out.push({
+          text: '已按「只看限 ' + GK.examCohortYear() + ' 届」挡掉 <b class="num">' +
+                ex[onlyCohortWhy] + '</b> 个职位：它们的备注写的是「限应届高校毕业生」' +
+                '（含择业期），或者根本没提应往届。',
+          action: { label: '取消这条', key: 'onlyCohort' },
+        });
+      }
+    }
 
     // 英语留空（默认）时上面两条都不会出现——工具没排除任何职位。
     // 但结果里确实混着要求英语的职位，得说明白，否则用户以为自己都符合。
@@ -704,6 +733,7 @@
     if (p.ratios.length) advice.push('面试比例改为不限');
     if (p.minHeadcount > 0) advice.push('降低招考人数下限');
     if (p.excludeTagKeys.length) advice.push('取消勾选的排除标签');
+    if (p.onlyCohort) advice.push('取消「只看限 ' + GK.examCohortYear() + ' 届」');
     if (p.levels.length || p.exams.length || p.attrs.length || p.categories.length) {
       advice.push('放宽机构层级 / 考试类别 / 职位属性 / 招录类别');
     }
@@ -1091,7 +1121,10 @@
       const btn = e.target.closest('button[data-toggle-rule]');
       if (!btn) return;
       const key = btn.getAttribute('data-toggle-rule');
-      const box = { ruleFresh: 'f-rule-fresh', ruleGender: 'f-rule-gender', ruleEnglish: 'f-rule-english' }[key];
+      const box = {
+        ruleFresh: 'f-rule-fresh', ruleGender: 'f-rule-gender',
+        ruleEnglish: 'f-rule-english', onlyCohort: 'f-only-cohort',
+      }[key];
       if (box) $(box).checked = false;
       onFormChange();
     });
