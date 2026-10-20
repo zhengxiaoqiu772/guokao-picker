@@ -251,14 +251,14 @@
 
     <section class="tally" aria-label="筛选结果概览">
       <div class="tally__item">
-        <span class="tally__label">可报职位</span>
+        <span class="tally__label" id="tally-label-count">可报职位</span>
         <span class="tally__value tally__value--accent" id="tally-count">—</span>
       </div>
       <div class="tally__item">
         <span class="tally__label">招录人数</span>
         <span class="tally__value" id="tally-people">—</span>
       </div>
-      <div class="tally__item">
+      <div class="tally__item" id="tally-exact-item">
         <span class="tally__label">专业精准命中</span>
         <span class="tally__value" id="tally-exact">—</span>
       </div>
@@ -269,7 +269,7 @@
 
     <div class="toolbar">
       <input type="search" class="toolbar__search" id="f-search"
-             placeholder="搜部门、职位、代码、地点" autocomplete="off">
+             placeholder="搜部门、职位、代码、地点（不填专业也能搜）" autocomplete="off">
       <label class="toolbar__label" for="f-sort">排序</label>
       <select id="f-sort" style="width:auto;min-width:110px">
         <option value="tier" selected>按匹配档位</option>

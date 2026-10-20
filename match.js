@@ -431,6 +431,10 @@
                 desc: '命中你勾选的专业类目' },
     category: { key: 'category', label: '门类命中 · 专业不限', stamp: '门类',
                 desc: '门类级命中或专业不限，建议人工确认' },
+    // 专业栏空着时的纯文字检索。它不是一个匹配档位——不构成「你能报」的判断，
+    // 只是把表里符合关键词的行捞出来，所以单列一档，界面上也不用朱砂印章。
+    search:   { key: 'search',   label: '按名称检索',      stamp: '检索',
+                desc: '部门、职位、代码、地点、专业栏与备注' },
   };
 
   /**
@@ -781,20 +785,49 @@
     opts = opts || {};
     const profile = buildProfile(rawProfile);
     const search = normalize(opts.search || '');
-    const groups = { exact: [], class: [], category: [] };
+
+    // 专业栏空着时，本来一行的匹配档位都判不出来（19,426 行里只有 7 行专业不限），
+    // 结果必然是 0。但「想按名字找某个岗位」跟「我能不能报」是两件事：
+    // 只要搜了东西，就退回纯文字检索——扫全表、不套任何报考条件，
+    // 免得人为了搜一个部门名还得先编一个专业出来。
+    const noMajor = !profile.names.length && !profile.codes.length && !profile.classes.length;
+    const searchOnly = !!search && noMajor;
+
+    // 六位纯数字按「完整代码」找，不按子串：部门代码 102000（外交部）是
+    // 职位代码 300110200001 中间的一段，按子串会连带捞出 39 个别的部门。
+    // 但职位代码是 12 位，人常常只记得前六位，所以前缀命中照样算。
+    const sixDigit = /^[0-9]{6}$/.test(search);
+    const codeBoundary = sixDigit
+      ? new RegExp('(^|[^0-9])' + search + '([^0-9]|$)') : null;
+    const hit = (rec) => {
+      const hay = rec._searchText;
+      if (!hay) return false;
+      if (!codeBoundary) return hay.indexOf(search) >= 0;
+      return String(rec['部门代码']) === search ||
+             String(rec['职位代码']).indexOf(search) === 0 ||
+             codeBoundary.test(hay);
+    };
+
+    const groups = searchOnly ? { search: [] } : { exact: [], class: [], category: [] };
     const excluded = {};
     let totalHeadcount = 0;
 
     for (const rec of records) {
+      if (searchOnly) {
+        if (!hit(rec)) continue;
+        rec.tier = 'search';
+        rec.reasons = [];
+        rec.flags = [];
+        groups.search.push(rec);
+        totalHeadcount += rec.headcount;
+        continue;
+      }
       const r = matchRow(rec, profile);
       if (!r.ok) {
         excluded[r.why] = (excluded[r.why] || 0) + 1;
         continue;
       }
-      if (search) {
-        const hay = rec._searchText;
-        if (!hay || hay.indexOf(search) < 0) continue;
-      }
+      if (search && !hit(rec)) continue;
       rec.tier = r.tier;
       rec.reasons = r.reasons;
       rec.flags = r.flags;
@@ -806,14 +839,21 @@
     const order = SORTERS[opts.sort] || SORTERS.tier;
     for (const key of Object.keys(groups)) groups[key].sort(order);
 
-    const all = groups.exact.concat(groups.class, groups.category);
+    const all = searchOnly
+      ? groups.search
+      : groups.exact.concat(groups.class, groups.category);
+    const byTier = (key) => {
+      const list = groups[key] || [];
+      return { count: list.length, headcount: sumHead(list) };
+    };
     const stats = {
       total: all.length,
       headcount: totalHeadcount,
       byTier: {
-        exact: { count: groups.exact.length, headcount: sumHead(groups.exact) },
-        class: { count: groups.class.length, headcount: sumHead(groups.class) },
-        category: { count: groups.category.length, headcount: sumHead(groups.category) },
+        exact: byTier('exact'),
+        class: byTier('class'),
+        category: byTier('category'),
+        search: byTier('search'),
       },
       provinces: topCounts(all, (r) => r.province),
       levels: topCounts(all, (r) => r['机构层级']),
@@ -825,7 +865,7 @@
       ),
       excluded: excluded,
     };
-    return { groups: groups, all: all, stats: stats };
+    return { mode: searchOnly ? 'search' : 'match', groups: groups, all: all, stats: stats };
   }
 
   function sumHead(list) {
@@ -879,8 +919,11 @@
       rec.tags = analyzeRemark(rec['备注'], rec['职位分布']);
       rec.cohortReq = cohortYearsOf(rec['备注']);
       for (const y of rec.cohortReq) cohortTally.set(y, (cohortTally.get(y) || 0) + 1);
+      // 部门代码也进搜索文本：卡片上现在两个代码并排显示，看到就能搜；
+      // 何况职位代码全表复用（19,426 行只有 7,178 个不同值），
+      // 单靠职位代码搜出来的往往不止一个部门。
       rec._searchText = normalize([
-        rec['部门名称'], rec['用人司局'], rec['招考职位'], rec['职位代码'],
+        rec['部门名称'], rec['部门代码'], rec['用人司局'], rec['招考职位'], rec['职位代码'],
         rec['工作地点'], rec['专业'], rec['备注'],
       ].join('\u0001'));
       records[i] = rec;

@@ -465,19 +465,23 @@
     renderDrawer();
     renderSuggestion();
 
-    $('live').textContent = '筛选完成，' + lastResult.stats.total + ' 个职位';
+    const verb = lastResult.mode === 'search' ? '检索' : '筛';
+    $('live').textContent = (lastResult.mode === 'search' ? '检索' : '筛选') +
+      '完成，' + lastResult.stats.total + ' 个职位';
     // 无头浏览器 / 虚拟时钟下 performance.now() 可能不动，显示 0 ms 像是坏了
     $('tally-aside').textContent = state.onlySaved
-      ? '只看已收藏（共筛出 ' + lastResult.stats.total.toLocaleString('en-US') + ' 个）'
+      ? '只看已收藏（共' + verb + '出 ' + lastResult.stats.total.toLocaleString('en-US') + ' 个）'
       : '在 ' + DATA.meta.total.toLocaleString('en-US') +
-        ' 个职位中筛出 · ' + (elapsed < 1 ? '不足 1' : elapsed) + ' ms';
+        ' 个职位中' + verb + '出 · ' + (elapsed < 1 ? '不足 1' : elapsed) + ' ms';
     firstRender = false;
   }
 
   /** 当前档位筛选 + 只收藏 之后真正要列出的记录 */
   function visibleGroups() {
-    const tiers = state.tierFilter === 'all'
-      ? ['exact', 'class', 'category'] : [state.tierFilter];
+    // 检索模式只有一档，档位筛选（精准 / 类合 / 门类）在这里没有意义
+    const tiers = lastResult.mode === 'search'
+      ? ['search']
+      : (state.tierFilter === 'all' ? ['exact', 'class', 'category'] : [state.tierFilter]);
     const out = [];
     tiers.forEach(function (t) {
       let list = lastResult.groups[t] || [];
@@ -500,10 +504,25 @@
     tick($('tally-count'), count, dur);
     tick($('tally-people'), people, dur);
     tick($('tally-exact'), exact, dur);
+
+    // 检索模式下「可报职位 / 专业精准命中」都不成立：
+    // 前者改成「检索结果」，后者整格收起来。
+    const searchMode = lastResult.mode === 'search';
+    $('tally-label-count').textContent = searchMode ? '检索结果' : '可报职位';
+    $('tally-exact-item').hidden = searchMode;
   }
 
   function renderNotices() {
     const box = $('notices');
+
+    // 检索模式不讲排除原因：这里一行都没被「排除」，只是没搜到
+    if (lastResult.mode === 'search') {
+      box.innerHTML = '<p class="notice notice--info"><span>专业栏空着，正在按文字检索全部 ' +
+        DATA.meta.total.toLocaleString('en-US') + ' 个职位，<b>没有套用左侧报考条件</b>。' +
+        '检索结果只说明表里有哪些岗位，不代表你能报。填上专业后即恢复资格匹配。</span></p>';
+      return;
+    }
+
     const ex = lastResult.stats.excluded || {};
     const out = [];
 
@@ -571,6 +590,13 @@
 
   function renderTiers() {
     const t = lastResult.stats.byTier;
+    if (lastResult.mode === 'search') {
+      // 纯检索没有档位可分，把三颗药丸换成一句「这是检索，不是可报判断」
+      $('tiers').innerHTML = '<span class="tier-pill tier-pill--on">检索结果 ' +
+        lastResult.stats.total.toLocaleString('en-US') + '</span>' +
+        '<span class="tier-note">未套用左侧报考条件</span>';
+      return;
+    }
     const defs = [
       { key: 'all', label: '全部', count: lastResult.stats.total },
       { key: 'exact', label: GK.TIERS.exact.label, count: t.exact.count },
@@ -601,7 +627,7 @@
     host.innerHTML = groups.map(function (g) {
       if (!g.list.length) return '';
       const def = GK.TIERS[g.tier];
-      const cap = state.caps[g.tier];
+      const cap = state.caps[g.tier] || CAP_STEP;
       const shown = g.list.slice(0, cap);
       const rest = g.list.length - shown.length;
       const headText = shown.reduce(function (a, r) { return a + r.headcount; }, 0);
@@ -640,6 +666,19 @@
       '</div>';
     }
 
+    // 检索模式搜空了：这不是「条件太窄」，别让人去掉专业
+    if (lastResult.mode === 'search') {
+      return '<div class="empty">' +
+        '<p class="empty__title">没有搜到「' + esc(state.search) + '」</p>' +
+        '<p class="empty__text">检索的是部门名称、用人司局、职位名称、部门代码、职位代码、工作地点、专业栏和备注。</p>' +
+        '<ul class="empty__list">' +
+          '<li>先用短一点的片段，例如只搜「天府新区」而不带上级机关全称</li>' +
+          '<li>职位的正式名称里可能不带「局」「处」这类后缀</li>' +
+          '<li>按代码搜时注意别把部门代码和职位代码拼在一起</li>' +
+        '</ul>' +
+      '</div>';
+    }
+
     // 没填专业时的 0 是必然的：19,426 个职位里只有 7 个不限专业，且都还附带别的条件。
     // 这跟「条件太窄筛空了」是两回事，得分开说，否则用户以为工具坏了。
     if (!p.majorText && !p.majorCodes && !p.classes.length) {
@@ -653,6 +692,8 @@
           '<li>在左侧「所学专业」填专业名称，多数人还会填上专业代码</li>' +
           '<li>下面会给出推断的专业类目，点一下就选上 —— 这一档通常能多出上千个职位</li>' +
           '<li>对照《专业参考目录》再手工勾选几个类目，宁多勿少</li>' +
+          '<li>只想先找某个部门或岗位？直接在上面搜索框输入名字，不用填专业 —— ' +
+            '那会按文字检索全表，不判断你能不能报</li>' +
         '</ul>' +
       '</div>';
     }
@@ -780,12 +821,21 @@
         '<div class="card__ident">' +
           '<h3 class="card__dept">' + esc(title) + '</h3>' +
           '<p class="card__post">' + esc(sub) + '</p>' +
-          '<p class="card__code">' + esc(r['职位代码']) +
-            '<button type="button" class="card__copy" data-copy="' + esc(r['职位代码']) + '">复制</button>' +
+          '<p class="card__code">' +
+            '<span class="card__code-item"><span class="card__code-label">部门代码</span>' +
+              '<span class="card__code-value">' + esc(r['部门代码']) + '</span>' +
+              '<button type="button" class="card__copy" data-copy="' + esc(r['部门代码']) +
+                '" aria-label="复制部门代码">复制</button></span>' +
+            '<span class="card__code-item"><span class="card__code-label">职位代码</span>' +
+              '<span class="card__code-value">' + esc(r['职位代码']) + '</span>' +
+              '<button type="button" class="card__copy" data-copy="' + esc(r['职位代码']) +
+                '" aria-label="复制职位代码">复制</button></span>' +
           '</p>' +
         '</div>' +
         '<div class="seal' + (animate ? '' : ' seal--idle') +
-          (tier === 'category' ? ' seal--dashed' : '') + '" aria-label="匹配档位：' + esc(def.label) + '">' +
+          (tier === 'category' ? ' seal--dashed' : '') +
+          (tier === 'search' ? ' seal--search' : '') +
+          '" aria-label="匹配档位：' + esc(def.label) + '">' +
           '<span>' + esc(def.stamp) + '</span>' +
         '</div>' +
       '</div>' +
@@ -1083,7 +1133,7 @@
       const more = e.target.closest('button[data-more]');
       if (more) {
         const tier = more.getAttribute('data-more');
-        state.caps[tier] += CAP_STEP;
+        state.caps[tier] = (state.caps[tier] || CAP_STEP) + CAP_STEP;
         renderGroups();
         return;
       }

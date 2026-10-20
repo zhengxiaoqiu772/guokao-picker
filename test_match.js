@@ -515,6 +515,46 @@ check('CSV 带 BOM 头', csv.charCodeAt(0), 0xFEFF);
 check('CSV 表头列数', csv.split('\r\n')[0].trim().split(',').length, GK.CSV_COLUMNS.length);
 check('CSV 行数（含表头）', csv.trim().split('\r\n').length, 4);
 
+// --- 3.14 专业栏空着时按名字检索 ---
+// 没填专业时 matchRow 判不出档位，结果必为 0；但只要搜了东西就退回纯文字检索，
+// 扫全表、不套报考条件。
+const noMajor = Object.assign({}, BASE, { level: '本科' });
+
+const byName = GK.filterRecords(records, noMajor, { search: '国家税务总局四川天府新区税务局' });
+check('空专业 + 搜部门名：进入检索模式', byName.mode, 'search');
+check('空专业 + 搜部门名：命中 3 个职位', byName.stats.total, 3);
+check('检索结果的档位是 search', byName.all.every((r) => r.tier === 'search'), true);
+check('检索结果不编造匹配依据', byName.all.every((r) => r.reasons.length === 0), true);
+
+const noSearch = GK.filterRecords(records, noMajor, {});
+check('空专业 + 不搜：仍是资格匹配模式', noSearch.mode, 'match');
+check('空专业 + 不搜：可报职位为 0', noSearch.stats.total, 0);
+
+// 部门代码 102000 是职位代码 300110200001 中间的一段，子串匹配会多捞 39 行
+const byDeptCode = GK.filterRecords(records, noMajor, { search: '102000' });
+check('按六位部门代码搜：命中 23 行', byDeptCode.stats.total, 23);
+check('按六位部门代码搜：全是该部门', byDeptCode.all.every((r) => r['部门代码'] === '102000'), true);
+
+const byPostCode = GK.filterRecords(records, noMajor, { search: '300110001003' });
+check('按十二位职位代码搜：命中 82 行（同码跨部门复用）', byPostCode.stats.total, 82);
+check('按十二位职位代码搜：职位代码全对',
+      byPostCode.all.every((r) => r['职位代码'] === '300110001003'), true);
+
+const byPrefix = GK.filterRecords(records, noMajor, { search: '300110' });
+check('按职位代码前六位搜：按前缀命中', byPrefix.stats.total, 14933);
+
+const withMajor = GK.filterRecords(records,
+  Object.assign({}, noMajor, { majorText: '数据科学与大数据技术', classes: ['计算机类'] }),
+  { search: '税务局' });
+check('填了专业后搜索回到资格匹配', withMajor.mode, 'match');
+const withMajorAll = GK.filterRecords(records,
+  Object.assign({}, noMajor, { majorText: '数据科学与大数据技术', classes: ['计算机类'] }), {}).stats.total;
+check('填了专业后搜索只缩小结果集',
+      withMajor.stats.total > 0 && withMajor.stats.total < withMajorAll, true);
+
+const miss = GK.filterRecords(records, noMajor, { search: '不存在的岗位xyz' });
+check('搜不到时仍是检索模式、结果为 0', [miss.mode, miss.stats.total], ['search', 0]);
+
 /* =====================================================================
  * 四、性能
  * ===================================================================*/
