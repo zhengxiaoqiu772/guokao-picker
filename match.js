@@ -252,6 +252,11 @@
   // 「该职位限招」也是漏的写法之一，一并补上。
   const LIMIT_VERB = '(?:仅限|限招|仅招录|本职位限招|本岗位限招|该职位限招|招考对象为|招录对象为|限)';
   const FRESH_LIMIT_RE = new RegExp(LIMIT_VERB + '[0-9]{0,4}年?应届');
+  // 限定动词后面直接跟四位年份的：「限2027年应届高校毕业生」「限2027应届」
+  // 「限2027年应届毕业生」。这是**只收当年那一届**，比裸的「限应届」窄，
+  // 所以要归 cohort 而不是 fresh。31 行，早先被上面的 FRESH_LIMIT_RE 先吃掉，
+  // 标成「含择业期」，2025、2026 届的人也能看到——它们其实报不了。
+  const FRESH_YEAR_RE = new RegExp(LIMIT_VERB + '(20[0-9]{2})\\s*年?\\s*应届');
 
   // 裸的「应届高校毕业生」：备注栏通篇都是要求，独立成句就等于「本职位面向应届」。
   // 税务系统的标准句式是「应届高校毕业生,男性,在本单位最低服务年限为5年」——
@@ -289,11 +294,29 @@
   }
 
   /**
+   * 一行明确点名的届别：既认「2027届」，也认「限2027年应届」这种不带「届」的写法。
+   * 两者都是只收那一届，规则判定和「只看限当年届」筛选要看到同一份年份。
+   */
+  function requiredCohortYears(remark) {
+    const text = String(remark == null ? '' : remark);
+    const years = cohortYearsOf(text);
+    const ym = FRESH_YEAR_RE.exec(text);
+    if (ym) {
+      const y = Number(ym[1]);
+      if (years.indexOf(y) < 0) years.push(y);
+    }
+    return years;
+  }
+
+  /**
    * 判定一行属于哪一档应届限制。
    * @returns {{tag:string|null, years:number[]}}
    */
   function analyzeFreshness(remark) {
     const text = String(remark == null ? '' : remark);
+    if (FRESH_YEAR_RE.test(text)) {
+      return { tag: 'cohort', years: requiredCohortYears(text) };
+    }
     if (FRESH_LIMIT_RE.test(text)) return { tag: 'fresh', years: [] };
     if (FRESH_BARE_RE.test(text) && !FRESH_NEG_RE.test(text)) return { tag: 'fresh', years: [] };
     const years = cohortYearsOf(text);
@@ -328,7 +351,8 @@
 
   function tagDesc(key) {
     if (key === 'cohort') {
-      return '备注写明「' + EXAM_COHORT_YEAR + '届高校毕业生」，只限当年毕业的应届生';
+      return '备注写明「' + EXAM_COHORT_YEAR + '届高校毕业生」或「限' +
+        EXAM_COHORT_YEAR + '年应届高校毕业生」，只限当年毕业的应届生';
     }
     return (TAG_BY_KEY[key] || EXTRA_TAGS[key] || { desc: '' }).desc;
   }
@@ -932,7 +956,7 @@
         }
       }
       rec.tags = analyzeRemark(rec['备注'], rec['职位分布']);
-      rec.cohortReq = cohortYearsOf(rec['备注']);
+      rec.cohortReq = requiredCohortYears(rec['备注']);
       for (const y of rec.cohortReq) cohortTally.set(y, (cohortTally.get(y) || 0) + 1);
       // 部门代码也进搜索文本：卡片上现在两个代码并排显示，看到就能搜；
       // 何况职位代码全表复用（19,426 行只有 7,178 个不同值），
@@ -1013,6 +1037,7 @@
     tagLabel: tagLabel,
     tagDesc: tagDesc,
     cohortYearsOf: cohortYearsOf,
+    requiredCohortYears: requiredCohortYears,
     analyzeFreshness: analyzeFreshness,
     // 现取而不是导出值：EXAM_COHORT_YEAR 要等 unpack 扫完数据才定下来
     examCohortYear: function () { return EXAM_COHORT_YEAR; },

@@ -236,8 +236,14 @@ check('裸写「应届高校毕业生」独句成行算限应届',
       GK.analyzeRemark('应届高校毕业生,男性,在本单位最低服务年限为5年', '其他职位').indexOf('fresh') >= 0, true);
 check('裸写「应届毕业生」（不带「高校」）也算',
       GK.analyzeRemark('应届毕业生,最低服务年限5年', '其他职位').indexOf('fresh') >= 0, true);
-check('「限2027年应届高校毕业生」算限应届（动词后隔了年份）',
-      GK.analyzeRemark('限' + thisYear + '年应届高校毕业生,同时取得学历学位', '其他职位').indexOf('fresh') >= 0, true);
+// 「限2027年应届高校毕业生」写明了年份，是只收当年那一届，比裸的「限应届」窄。
+// 早先它被 FRESH_LIMIT_RE 先吃掉、标成「含择业期」，2025、2026 届的人也能看到（31 行）。
+check('「限2027年应届高校毕业生」只算当年届，不算含择业期的应届',
+      [GK.analyzeFreshness('限' + thisYear + '年应届高校毕业生,同时取得学历学位').tag,
+       GK.requiredCohortYears('限' + thisYear + '年应届高校毕业生,同时取得学历学位')],
+      ['cohort', [thisYear]]);
+check('「限2027应届高校毕业生」（不带「年」）同样只认当年届',
+      GK.analyzeFreshness('限' + thisYear + '应届高校毕业生;本科生大学英语四级425分').tag, 'cohort');
 check('「该职位限招应届高校毕业生」算限应届',
       GK.analyzeRemark('该职位限招应届高校毕业生', '其他职位').indexOf('fresh') >= 0, true);
 // 但同一组字换个位置意思就反了，这四条是边界，必须挡住
@@ -579,6 +585,33 @@ check('关掉「按应届身份排除」后，只看限届仍生效', cohortRule
 const cohortMismatch = GK.filterRecords(records,
   Object.assign({}, cohortBase, { gradYear: '2026', onlyCohort: true }), {});
 check('只看限2027届 + 毕业年份选 2026：结果必然为 0', cohortMismatch.stats.total, 0);
+
+// 「限2027年应届高校毕业生」这种不带「届」的写法（31 行）同样是只收当年届，
+// 既要被新筛选收进来，也不能放行择业期内的 2026 届。
+const yearLimitRe = new RegExp('限' + thisYear + '年?应届');
+const yearLimitRows = records.filter((r) => yearLimitRe.test(r['备注']));
+check('「限2027年应届」写法共 31 行', yearLimitRows.length, 31);
+check('这 31 行全部归为当年届',
+      yearLimitRows.every((r) => r.tags.indexOf('cohort') >= 0 &&
+                                   r.cohortReq.indexOf(thisYear) >= 0), true);
+check('这 31 行不再被当成含择业期',
+      yearLimitRows.every((r) => r.tags.indexOf('fresh') < 0), true);
+
+const yearLaw = records.find((r) => yearLimitRe.test(r['备注']) &&
+                                    r['专业'].indexOf('法学') >= 0 &&
+                                    r['学历'].indexOf('本科') >= 0);
+const yearLawProfile = Object.assign({}, BASE, {
+  level: '本科', majorText: '法学', majorCodes: '030101K', classes: ['法学类'],
+});
+const yearLawRes = GK.filterRecords(records,
+  Object.assign({}, yearLawProfile, { onlyCohort: true }), {});
+check('只看限2027届的结果里含年份式限应届的职位',
+      yearLawRes.all.some((r) => r.id === yearLaw.id), true);
+check('年份式限应届：2027 届能报',
+      GK.matchRow(yearLaw, GK.buildProfile(yearLawProfile)).ok, true);
+check('年份式限应届：2026 届不再放行（早先是漏的）',
+      GK.matchRow(yearLaw, GK.buildProfile(Object.assign({}, yearLawProfile, { gradYear: '2026' }))).ok,
+      false);
 
 /* =====================================================================
  * 四、性能
