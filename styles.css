@@ -171,6 +171,28 @@ a:hover { border-bottom-color: var(--indigo); }
 }
 .masthead__actions { margin-top: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
 
+/* 考试类型切换：国考 / 四川省考。做成一对公文标签，
+   选中的一枚用墨色实底，未选中的留白 —— 不再动朱砂，朱砂留给印章与计数。 */
+.examswitch {
+  display: inline-flex;
+  margin: 0 0 20px;
+  border: 1px solid var(--rule-strong);
+}
+.examswitch__item {
+  padding: 4px 15px;
+  font-size: 13px;
+  letter-spacing: .1em;
+  color: var(--ink-soft);
+  border: 0;
+  border-right: 1px solid var(--rule);
+  background: transparent;
+  white-space: nowrap;
+}
+.examswitch__item:last-child { border-right: 0; }
+.examswitch__item:hover { color: var(--cinnabar); background: rgba(168, 32, 26, .06); }
+.examswitch__item--on { background: var(--ink); color: var(--paper); }
+.examswitch__item--on:hover { background: var(--ink); color: var(--paper); }
+
 /* --------------------------------------------------------------------------
    4. 骨架
    -------------------------------------------------------------------------- */
@@ -743,7 +765,7 @@ mark {
 @media print {
   :root { --rail-width: 0; }
   body { background: #fff; font-size: 11pt; }
-  .rail, .toolbar, .drawer, .loading, .masthead__actions,
+  .rail, .toolbar, .drawer, .loading, .examswitch, .masthead__actions,
   .card__save, .card__more, .card__copy,
   .tiers, .dist__tabs, .notice button { display: none !important; }
   .shell { display: block; padding: 0; max-width: none; }

@@ -1,0 +1,25 @@
+/* ==========================================================================
+   四川省考页面 —— 只补 styles.css 没覆盖的几处
+   ========================================================================== */
+
+/* 22 个市州，比国考的 31 个省份少，列表可以矮一点 */
+#f-city-list { max-height: 196px; }
+
+/* 卡片条件网格里，「考录对象」的原文常有两行，给宽行一点行距 */
+.card__grid dd.wide { line-height: 1.55; }
+
+/* 省考的「拟任职务」比较长（一级主任科员以下及其他相当职级层次），
+   和别的值同处 1fr 列，允许换行即可，不额外缩字号 */
+.card__grid dd { line-height: 1.5; }
+
+/* 考录信息：标签列定宽、值列自适应，比原来用「·」串成一行好读。
+   外层 .card__remark 是 pre-wrap，得在这里还原，否则标签间的换行会留下空行 */
+.card__remark .card__meta {
+  white-space: normal;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 14px;
+  margin: 0;
+}
+.card__remark .card__meta dt { color: var(--ink-faint); }
+.card__remark .card__meta dd { margin: 0; }
