@@ -26,6 +26,7 @@
   let DATA = null;
   let lastResult = null;
   let firstRender = true;
+  let favOpen = false;
   const saved = new Set();
 
   const state = {
@@ -480,6 +481,7 @@
     renderGroups();
     renderDist();
     renderDrawer();
+    if (favOpen) renderFavPage();
     renderSuggestion();
 
     $('live').textContent = ({
@@ -884,8 +886,9 @@
     }).join('') + '</div>';
   }
 
-  function cardHTML(r, tier, animate) {
-    const def = SC.TIERS[tier];
+  function cardHTML(r, tier, animate, sealOverride) {
+    const def = sealOverride || SC.TIERS[tier];
+    const sealWhy = sealOverride && sealOverride.why;
     const isSaved = saved.has(r.id);
     const tokens = tokensFromReasons(r.reasons);
     // 用表里的原文，不用 major.raw：后者在 unpack 时被 flat() 压掉了换行，
@@ -895,8 +898,10 @@
       ? r['内设机构'] + ' · ' + r['职位名称']
       : r['职位名称'];
 
-    const sealCls = (tier === 'all' || tier === 'eligible') ? ' seal--search' : '';
-    const dashed = (tier === 'category' || tier === 'eligible') ? ' seal--dashed' : '';
+    const sealCls = sealOverride ? (sealOverride.cls || '')
+      : (tier === 'all' || tier === 'eligible') ? ' seal--search' : '';
+    const dashed = sealOverride ? ''
+      : (tier === 'category' || tier === 'eligible') ? ' seal--dashed' : '';
 
     return '<article class="card' + (isSaved ? ' card--saved' : '') + '" data-id="' + r.id + '">' +
       '<div class="card__top">' +
@@ -916,9 +921,12 @@
         '</div>' +
       '</div>' +
       gridHTML(r) +
-      (rawMajor || (r.reasons && r.reasons.length) ||
+      (rawMajor || sealWhy || (r.reasons && r.reasons.length) ||
        (r.matchFlags && r.matchFlags.length)
         ? '<div class="card__major">' +
+            (sealWhy
+              ? '<p class="card__why">不符合当前条件：' + esc(sealWhy) + '</p>'
+              : '') +
             (rawMajor
               ? '<span class="card__major-label">专业栏原文</span>' +
                 '<p class="card__major-text">' + highlight(rawMajor, tokens) + '</p>'
@@ -1034,6 +1042,7 @@
 
   function renderDrawer() {
     $('drawer-count').textContent = saved.size;
+    $('fav-count').textContent = saved.size;
     const body = $('drawer-body');
 
     if (!saved.size) {
@@ -1112,6 +1121,106 @@
     html += '</tr>';
 
     body.innerHTML = html + '</tbody></table>';
+  }
+
+  /* ===================================================================
+   * 收藏页：整页列出所有收藏，按当前条件下的匹配档位归组
+   * ===================================================================*/
+
+  // 收藏之后条件又改了，职位可能不再符合；单独一档，不混进「可报」里
+  function missSeal(why) {
+    return { label: '不符合当前条件', stamp: '不符', cls: ' seal--miss', why: why };
+  }
+
+  function favGroups() {
+    const list = Array.from(saved).map(function (id) { return records[id]; }).filter(Boolean);
+    if (!list.length) return [];
+
+    const profile = SC.buildProfile(state.profile);
+    if (!SC.personalActive(profile)) {
+      return [{
+        label: '收藏的职位',
+        desc: '还没填个人条件，先按收藏顺序列出；填了条件后会按匹配档位归组',
+        items: list.map(function (r) { return { r: r, tier: 'all' }; }),
+      }];
+    }
+
+    const buckets = { exact: [], class: [], category: [], eligible: [], miss: [] };
+    list.forEach(function (r) {
+      const m = SC.matchRow(r, profile);
+      if (m.ok) {
+        const tier = m.tier || 'eligible';
+        buckets[tier].push({ r: r, tier: tier });
+      } else {
+        buckets.miss.push({ r: r, tier: 'all', seal: missSeal(m.why) });
+      }
+    });
+
+    return ['exact', 'class', 'category', 'eligible', 'miss'].filter(function (k) {
+      return buckets[k].length;
+    }).map(function (k) {
+      return k === 'miss'
+        ? { label: '不符合当前条件',
+            desc: '条件改了以后不再符合，可以先留着，也可以点「★ 已收藏」移出',
+            items: buckets[k] }
+        : { label: SC.TIERS[k].label, desc: SC.TIERS[k].desc, items: buckets[k] };
+    });
+  }
+
+  function renderFavPage() {
+    $('fav-count').textContent = saved.size;
+    $('favpage-count').textContent = saved.size;
+
+    const body = $('favpage-body');
+    if (!saved.size) {
+      body.innerHTML = '<div class="empty">' +
+        '<p class="empty__title">还没有收藏任何职位</p>' +
+        '<p class="empty__text">回到选岗页，在职位卡右下角点「☆ 收藏」，' +
+          '收藏的职位会集中到这里。</p>' +
+        '<p style="margin:18px 0 0">' +
+          '<button type="button" class="btn btn--primary" data-fav-back>去挑职位</button></p>' +
+      '</div>';
+      return;
+    }
+
+    body.innerHTML = favGroups().map(function (g) {
+      const people = g.items.reduce(function (a, it) { return a + it.r.headcount; }, 0);
+      const cards = g.items.map(function (it) {
+        return cardHTML(it.r, it.tier, false, it.seal || null);
+      }).join('');
+      return '<section class="group">' +
+        '<div class="group-head">' +
+          '<h2 class="group-head__title">' + esc(g.label) + '</h2>' +
+          '<span class="group-head__count">' + g.items.length.toLocaleString('en-US') +
+            ' 个 / ' + people.toLocaleString('en-US') + ' 人</span>' +
+          '<span class="group-head__desc">' + esc(g.desc) + '</span>' +
+        '</div>' +
+        '<div class="cards">' + cards + '</div>' +
+      '</section>';
+    }).join('');
+  }
+
+  function openFavPage() {
+    if (favOpen) return;
+    favOpen = true;
+    renderFavPage();
+    $('favpage').hidden = false;
+    $('favpage').scrollTop = 0;
+    document.body.classList.add('fav-open');
+    // 整页盖住选岗界面，背后就别再让 Tab 键走进去
+    document.querySelector('.shell').inert = true;
+    $('drawer').inert = true;
+    $('fav-back').focus();
+  }
+
+  function closeFavPage() {
+    if (!favOpen) return;
+    favOpen = false;
+    $('favpage').hidden = true;
+    document.body.classList.remove('fav-open');
+    document.querySelector('.shell').inert = false;
+    $('drawer').inert = false;
+    $('btn-fav').focus();
   }
 
   /* ===================================================================
@@ -1212,22 +1321,7 @@
         renderGroups();
         return;
       }
-      const copy = e.target.closest('button[data-copy]');
-      if (copy) {
-        copyText(copy.getAttribute('data-copy'), copy);
-        return;
-      }
-      const save = e.target.closest('.card__save');
-      if (save) {
-        toggleSave(parseInt(save.closest('.card').getAttribute('data-id'), 10));
-        return;
-      }
-      const expand = e.target.closest('.card__more');
-      if (expand) {
-        const panel = expand.closest('.card').querySelector('.card__remark');
-        panel.hidden = !panel.hidden;
-        expand.textContent = panel.hidden ? '职位简介 · 要求 · 联系方式' : '收起简介与要求';
-      }
+      handleCardClick(e);
     });
 
     $('drawer-bar').addEventListener('click', toggleDrawer);
@@ -1237,6 +1331,13 @@
     $('drawer-body').addEventListener('click', function (e) {
       const btn = e.target.closest('button[data-unsave]');
       if (btn) toggleSave(parseInt(btn.getAttribute('data-unsave'), 10));
+    });
+
+    $('btn-fav').addEventListener('click', openFavPage);
+    $('fav-back').addEventListener('click', closeFavPage);
+    $('favpage-body').addEventListener('click', function (e) {
+      if (e.target.closest('[data-fav-back]')) { closeFavPage(); return; }
+      handleCardClick(e);
     });
 
     $('btn-csv').addEventListener('click', exportCSV);
@@ -1256,6 +1357,11 @@
     });
 
     document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && favOpen) {
+        e.preventDefault();
+        closeFavPage();
+        return;
+      }
       if (e.key === '/' && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) {
         e.preventDefault();
         $('f-search').focus();
@@ -1285,18 +1391,43 @@
     }
   }
 
+  /** 卡片上的复制、收藏、展开在选岗结果和收藏页共用一套处理 */
+  function handleCardClick(e) {
+    const copy = e.target.closest('button[data-copy]');
+    if (copy) {
+      copyText(copy.getAttribute('data-copy'), copy);
+      return;
+    }
+    const save = e.target.closest('.card__save');
+    if (save) {
+      toggleSave(parseInt(save.closest('.card').getAttribute('data-id'), 10));
+      return;
+    }
+    const expand = e.target.closest('.card__more');
+    if (expand) {
+      const panel = expand.closest('.card').querySelector('.card__remark');
+      panel.hidden = !panel.hidden;
+      expand.textContent = panel.hidden ? '职位简介 · 要求 · 联系方式' : '收起简介与要求';
+    }
+  }
+
   function toggleSave(id) {
     if (saved.has(id)) saved.delete(id); else saved.add(id);
     persist();
-    const card = document.querySelector('.card[data-id="' + id + '"]');
-    if (card) {
-      const btn = card.querySelector('.card__save');
-      const on = saved.has(id);
-      card.classList.toggle('card--saved', on);
-      btn.classList.toggle('card__save--on', on);
-      btn.textContent = on ? '★ 已收藏' : '☆ 收藏';
-    }
+    const on = saved.has(id);
+    // 同一职位可能同时出现在结果页和收藏页，两处都要改
+    Array.prototype.forEach.call(
+      document.querySelectorAll('.card[data-id="' + id + '"]'),
+      function (card) {
+        card.classList.toggle('card--saved', on);
+        const btn = card.querySelector('.card__save');
+        if (!btn) return;
+        btn.classList.toggle('card__save--on', on);
+        btn.textContent = on ? '★ 已收藏' : '☆ 收藏';
+      }
+    );
     renderDrawer();
+    if (favOpen) renderFavPage();
     if (state.onlySaved) render();
   }
 

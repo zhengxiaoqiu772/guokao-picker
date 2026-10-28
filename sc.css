@@ -22,6 +22,69 @@
 /* 对比抽屉里的专业栏原文同理 */
 .compare td { white-space: pre-line; }
 
+/* --------------------------------------------------------------------------
+   收藏页：工具条「★ 收藏」整页打开
+   -------------------------------------------------------------------------- */
+
+.btn--fav {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  color: var(--cinnabar); border-color: var(--cinnabar);
+}
+.btn--fav:hover { background: var(--cinnabar); color: #fff; }
+.btn--fav .fav-star { font-size: 14px; }
+.fav-count { font-family: var(--numerals); font-weight: 700; }
+
+.favpage {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--paper);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.favpage[hidden] { display: none; }
+/* 整页盖住时，背后别再滚动，抽屉也先收起来 */
+body.fav-open { overflow: hidden; }
+body.fav-open .drawer { display: none; }
+
+.favpage__bar {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 32px;
+  background: var(--paper);
+  border-bottom: 2px solid var(--cinnabar);
+}
+.favpage__title {
+  margin: 0; font-family: var(--serif); font-size: 17px; font-weight: 700;
+  display: flex; align-items: baseline; gap: 7px;
+}
+.favpage__star { color: var(--cinnabar); }
+.favpage__count { font-family: var(--numerals); color: var(--cinnabar); }
+.favpage__hint { margin-left: auto; font-size: 12.5px; color: var(--ink-faint); }
+.favpage__body { max-width: 1180px; margin: 0 auto; padding: 18px 32px 80px; }
+
+/* 收藏之后条件改了、不再符合的职位：灰色印章，不跟「可报」混在一起 */
+.seal--miss { border-color: var(--ink-faint); color: var(--ink-faint); }
+
+@media (max-width: 640px) {
+  .favpage__bar { padding: 10px 16px; }
+  .favpage__body { padding: 14px 16px 60px; }
+  .favpage__hint { display: none; }
+  /* 窄屏上组标题被计数和说明挤成一字一行，说明另起一行 */
+  .favpage__body .group-head { flex-wrap: wrap; row-gap: 3px; }
+  .favpage__body .group-head__title { white-space: nowrap; }
+  .favpage__body .group-head__desc {
+    flex-basis: 100%; margin-left: 0; text-align: left;
+  }
+}
+
+@media print {
+  /* 在收藏页按 Ctrl+P 就打印收藏的职位，别把背后整页选岗结果也带上 */
+  body.fav-open .shell { display: none; }
+  body.fav-open .favpage { position: static; overflow: visible; }
+  body.fav-open .favpage__bar { border-bottom: none; padding: 0 0 10px; }
+  body.fav-open .favpage__bar .btn,
+  body.fav-open .favpage__hint { display: none; }
+}
+
 /* 考录信息：标签列定宽、值列自适应，比原来用「·」串成一行好读。
    外层 .card__remark 是 pre-wrap，得在这里还原，否则标签间的换行会留下空行 */
 .card__remark .card__meta {

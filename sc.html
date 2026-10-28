@@ -309,6 +309,9 @@
         <option value="tier">按匹配档位</option>
       </select>
       <span class="toolbar__spacer"></span>
+      <button type="button" class="btn btn--fav" id="btn-fav" title="打开收藏页（Esc 返回）">
+        <span class="fav-star">★</span> 收藏 <span class="fav-count" id="fav-count">0</span>
+      </button>
       <label class="toolbar__label"><input type="checkbox" id="f-onlysaved"> 只看收藏</label>
     </div>
 
@@ -325,6 +328,17 @@
     </section>
   </main>
 </div>
+
+<!-- ================= 收藏页 ================= -->
+<section class="favpage" id="favpage" hidden aria-label="收藏的职位">
+  <div class="favpage__bar">
+    <button type="button" class="btn" id="fav-back">← 返回选岗</button>
+    <h2 class="favpage__title"><span class="favpage__star">★</span>收藏的职位
+      <span class="favpage__count" id="favpage-count">0</span> 个</h2>
+    <span class="favpage__hint">点卡片上的「★ 已收藏」即可移出</span>
+  </div>
+  <div class="favpage__body" id="favpage-body"></div>
+</section>
 
 <!-- ================= 收藏抽屉 ================= -->
 <div class="drawer" id="drawer">
