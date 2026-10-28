@@ -346,6 +346,9 @@
       gradStatus: $('f-gradstatus').value,
       hukou: $('f-hukou').value,
       legalCert: $('f-legalcert').value,
+      accountingCert: $('f-accounting').value,
+      computerCert: $('f-computer').value,
+      disabilityCert: $('f-disability').value,
       english: $('f-english').value,
       majorText: $('f-major').value,
       majorCodes: $('f-codes').value,
@@ -377,6 +380,9 @@
     $('f-gradstatus').value = normalizeGradStatus(p.gradStatus);
     $('f-hukou').value = p.hukou || '';
     $('f-legalcert').value = p.legalCert || '';
+    $('f-accounting').value = p.accountingCert || '';
+    $('f-computer').value = p.computerCert || '';
+    $('f-disability').value = p.disabilityCert || '';
     $('f-english').value = p.english || '';
     $('f-major').value = p.majorText || '';
     $('f-codes').value = p.majorCodes || '';
@@ -409,7 +415,8 @@
 
     const all = SC.suggestClasses(text, {
       majorDict: DATA.majorDict, codeToLei: DATA.codeToLei,
-      nameToLei: DATA.nameToLei, leiVocab: DATA.leiVocab,
+      nameToLei: DATA.nameToLei, majorClass: DATA.majorClass,
+      leiVocab: DATA.leiVocab,
     });
     const todo = all.filter(function (s) { return !pickers.classes.has(s.lei); }).slice(0, 6);
 
@@ -541,7 +548,8 @@
     if (lastResult.mode === 'eligible') {
       out.push({
         tone: 'info',
-        text: '已按你填的学历、学位、政治面貌、性别、应届身份、户籍地、证书和英语水平判断；' +
+        text: '已按你填的学历、学位、政治面貌、性别、应届身份、户籍地、' +
+          '法律职业资格、会计/计算机资格、残疾人证和英语水平判断；' +
           '留空的项一律不排除。专业还没填，所以<b>没有判断专业是否符合</b>——' +
           '这一档只能当作「硬性条件过关」的候选。',
       });
@@ -589,12 +597,18 @@
     if (localScope) {
       gaps.push('<b class="num">' + localScope + '</b> 个限本省/本市州户籍或生源');
     }
-    const special = visibleList().filter(function (r) {
-      return r.tags.indexOf('accounting') >= 0 || r.tags.indexOf('computer') >= 0 ||
-        r.tags.indexOf('disability') >= 0;
-    }).length;
-    if (special) {
-      gaps.push('<b class="num">' + special + '</b> 个另有会计、计算机或残疾人专项要求');
+    // 这三项现在也是「我的条件」里的选项，填了就会排除，没填才提示
+    if (!p.accountingCert) {
+      const n = countRowsWithTag('accounting');
+      if (n) gaps.push('<b class="num">' + n + '</b> 个要求会计/审计资格');
+    }
+    if (!p.computerCert) {
+      const n = countRowsWithTag('computer');
+      if (n) gaps.push('<b class="num">' + n + '</b> 个要求计算机资格');
+    }
+    if (!p.disabilityCert) {
+      const n = countRowsWithTag('disability');
+      if (n) gaps.push('<b class="num">' + n + '</b> 个是残疾人专项');
     }
     if (gaps.length) {
       out.push({
@@ -729,6 +743,9 @@
     if (p.hukou) advice.push('核对户籍地');
     if (p.legalCert) advice.push('核对法律职业资格');
     if (p.english) advice.push('核对英语等级');
+    if (p.accountingCert) advice.push('核对会计/审计资格');
+    if (p.computerCert) advice.push('核对计算机资格');
+    if (p.disabilityCert) advice.push('核对残疾人证');
 
     const title = lastResult.mode === 'browse' ? '当前浏览条件下没有职位'
       : lastResult.mode === 'eligible' ? '按已填的硬性条件没有职位'
@@ -824,7 +841,9 @@
     const def = SC.TIERS[tier];
     const isSaved = saved.has(r.id);
     const tokens = tokensFromReasons(r.reasons);
-    const rawMajor = r.major.raw || r['专业'] || '';
+    // 用表里的原文，不用 major.raw：后者在 unpack 时被 flat() 压掉了换行，
+    // 「本科：…」和「研究生：…」会粘成「社会类研究生：…」
+    const rawMajor = r['专业'] || r.major.raw || '';
     const sub = r['内设机构']
       ? r['内设机构'] + ' · ' + r['职位名称']
       : r['职位名称'];
@@ -1022,7 +1041,7 @@
 
     html += '<tr><th class="rowhead">专业栏原文</th>';
     picked.forEach(function (r) {
-      html += '<td style="max-width:320px">' + highlight(r.major.raw || r['专业'], []) + '</td>';
+      html += '<td style="max-width:320px">' + highlight(r['专业'] || r.major.raw, []) + '</td>';
     });
     html += '</tr>';
 

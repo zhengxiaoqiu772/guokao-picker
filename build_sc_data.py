@@ -131,6 +131,42 @@ def common_prefix_len(a, b):
     return n
 
 
+def load_gk_class_hints(sc_text, lei_set):
+    """从国考构建产物里借一张「专业名 → 专业类」表。
+
+    省考表基本不写专业代码，也没有「0809计算机类」这种写法，所以像
+    「数据科学与大数据技术」这种和类目名毫无字面关系的专业，光看省考表推不出来
+    （39 行提到它，只有 1 行同时写了类目名）。国考表里代码和类目名都规范，
+    可以按代码前缀对上：080910T → 0809 → 计算机类。
+
+    只收「唯一确定类目」的，且这个专业要在省考表里真的出现过——宁缺勿错。
+    国考数据不存在时返回空表，不影响构建。
+    """
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "positions.js")
+    if not os.path.exists(path):
+        print("  未找到 data/positions.js，跳过国考码表补充")
+        return {}
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    text = text[text.index("window.GK_DATA=") + len("window.GK_DATA="):].strip()
+    gk = json.loads(text.rstrip(";"))
+    code_to_lei = gk.get("codeToLei") or {}
+
+    hints = defaultdict(set)
+    for entry in gk.get("majorDict") or []:
+        code, name = entry[0], entry[1]
+        if not re.fullmatch(r"[一-龥]{2,20}", name) or "研究生" in name:
+            continue
+        if name not in sc_text:
+            continue
+        # 国考里同一个专业名可能挂着不同代码（简称、笔误），归到的类目只是候选；
+        # 最后只收「候选唯一」的，两个以上就算推不准
+        for lei in code_to_lei.get(str(code)[:4], []):
+            if lei in lei_set:
+                hints[name].add(lei)
+    return {name: sorted(leis) for name, leis in hints.items() if len(leis) == 1}
+
+
 def system_of(sheet_name):
     """sheet 名 -> 系统类别。法院/检察院/省级机关是独立 sheet，其余按后缀。"""
     if sheet_name in ("法院系统", "检察院系统", "省级机关"):
@@ -255,6 +291,9 @@ def main():
             if is_lei(lei):
                 code_to_lei[code][lei] += 1
 
+    major_class = load_gk_class_hints(
+        "".join(flat(r[col["专业"]]) for r in rows), set(lei_counter))
+
     # ---- 列存 + 字典编码 ---------------------------------------------------
     all_columns = [[row[i] for row in rows] for i in range(len(COLUMNS))]
     encoded = []
@@ -291,6 +330,8 @@ def main():
             name: [lei for lei, _ in counter.most_common(2)]
             for name, counter in name_to_lei.items()
         },
+        # 省考表里推不出来的专业，借国考的「代码 → 类目」补上
+        "majorClass": major_class,
         "regions": regions,
         "systems": systems,
     }
@@ -307,8 +348,9 @@ def main():
 
     size_mb = os.path.getsize(out_path) / 1048576.0
     print("写出 %s  (%.2f MB)" % (out_path, size_mb))
-    print("类目词表 %d 条，专业代码表 %d 条，类目归属映射 %d 条"
-          % (len(payload["leiVocab"]), len(payload["majorDict"]), len(payload["codeToLei"])))
+    print("类目词表 %d 条，专业代码表 %d 条，类目归属映射 %d 条，国考补充 %d 条"
+          % (len(payload["leiVocab"]), len(payload["majorDict"]),
+             len(payload["codeToLei"]), len(payload["majorClass"])))
     print("地区: %s" % " / ".join("%s(%d)" % (n, c) for n, c in regions))
     print("系统: %s" % " / ".join("%s(%d)" % (n, c) for n, c in systems))
 

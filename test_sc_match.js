@@ -153,6 +153,23 @@ check('已过四级：仍够不着六级岗，可报 3,997 个',
       run({ english: '四级' }).stats.total, 3997);
 check('已过六级：不排除', run({ english: '六级' }).stats.total, 4001);
 
+// 「其他要求」里的专项资格：填「没有」才排除，留空不判断
+check('没有会计/审计资格：排除 44 个', run({ accountingCert: 'none' }).stats.total, 3957);
+check('没有计算机资格：排除 4 个', run({ computerCert: 'none' }).stats.total, 3997);
+check('没有残疾人证：排除 15 个残疾人专项', run({ disabilityCert: 'none' }).stats.total, 3986);
+check('排除原因各归各的',
+      [run({ accountingCert: 'none' }).stats.excluded['没有会计/审计资格'],
+       run({ computerCert: 'none' }).stats.excluded['没有计算机资格'],
+       run({ disabilityCert: 'none' }).stats.excluded['不是残疾人专项对象']], [44, 4, 15]);
+check('三项都没有：3,938 个（三类互不重叠）',
+      run({ accountingCert: 'none', computerCert: 'none', disabilityCert: 'none' }).stats.total, 3938);
+check('有资格不排除', run({ accountingCert: 'has' }).stats.total, 4001);
+check('留空不判断', run({ accountingCert: '', computerCert: '', disabilityCert: '' }).stats.total, 4001);
+check('只填专项资格也进入「符合硬性条件」', run({ accountingCert: 'has' }).mode, 'eligible');
+// 有会计资格、没有残疾人证：会计岗照收，残疾人专项仍被排掉
+check('分项判断互不牵连',
+      run({ accountingCert: 'has', disabilityCert: 'none' }).stats.total, 3986);
+
 check('只填学历时进入「符合硬性条件」模式', run({ level: '本科' }).mode, 'eligible');
 check('填专业后进入匹配模式',
       run({ level: '本科', majorText: '法学' }).mode, 'match');
@@ -307,10 +324,25 @@ section('七、专业类目推荐');
 check('法学 -> 法学类',
       SC.suggestClasses('法学030101K', DATA).map((s) => s.lei), ['法学类']);
 check('计算机科学与技术 -> 计算机类',
-      SC.suggestClasses('计算机科学与技术', DATA).some((s) => s.lei === '计算机类'), true);
+      SC.suggestClasses('计算机科学与技术', DATA).map((s) => s.lei), ['计算机类']);
 check('临床医学 -> 临床医学类',
-      SC.suggestClasses('临床医学', DATA).some((s) => s.lei === '临床医学类'), true);
-check('推断不出的专业不硬猜', SC.suggestClasses('会计学', DATA), []);
+      SC.suggestClasses('临床医学', DATA).map((s) => s.lei), ['临床医学类']);
+
+// 省考表里这俩和类目名毫无字面关系，只能靠国考的代码前缀对上
+check('数据科学与大数据技术 -> 计算机类',
+      SC.suggestClasses('数据科学与大数据技术', DATA).map((s) => s.lei), ['计算机类']);
+check('会计学 -> 工商管理类',
+      SC.suggestClasses('会计学', DATA).map((s) => s.lei), ['工商管理类']);
+check('金融学 -> 金融学类（不被多候选带偏）',
+      SC.suggestClasses('金融学', DATA).map((s) => s.lei), ['金融学类']);
+check('推不出的专业仍然不硬猜', SC.suggestClasses('不存在的专业', DATA), []);
+
+check('国考补充表只收单一类目',
+      Object.values(DATA.majorClass).every((v) => Array.isArray(v) && v.length === 1), true);
+check('国考补充表的键都是干净的专业名',
+      Object.keys(DATA.majorClass).every((k) => /^[一-龥]{2,20}$/.test(k)), true);
+check('补充的类目都在省考词表里',
+      Object.values(DATA.majorClass).every((v) => DATA.leiVocab.some((e) => e[0] === v[0])), true);
 
 /* =====================================================================
  * 八、检索

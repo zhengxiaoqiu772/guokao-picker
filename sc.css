@@ -12,6 +12,13 @@
    和别的值同处 1fr 列，允许换行即可，不额外缩字号 */
 .card__grid dd { line-height: 1.5; }
 
+/* 专业栏原文里的换行是表里真有的分段（3,375 行），
+   折成一行会粘成「社会类研究生：…」，看着像专业名的一部分 */
+.card__major-text { white-space: pre-wrap; }
+
+/* 对比抽屉里的专业栏原文同理 */
+.compare td { white-space: pre-line; }
+
 /* 考录信息：标签列定宽、值列自适应，比原来用「·」串成一行好读。
    外层 .card__remark 是 pre-wrap，得在这里还原，否则标签间的换行会留下空行 */
 .card__remark .card__meta {

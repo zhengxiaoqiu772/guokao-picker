@@ -126,7 +126,8 @@
   const DEFAULT_PROFILE = {
     // 我的条件：全部默认留空 = 不排除
     level: '', degree: '', politics: '', gender: '', gradStatus: '',
-    hukou: '', legalCert: '', english: '',
+    hukou: '', legalCert: '', accountingCert: '', computerCert: '',
+    disabilityCert: '', english: '',
     majorText: '', majorCodes: '', classes: [],
 
     // 浏览筛选：职位要求
@@ -422,6 +423,17 @@
       return { ok: false, why: '没有A类法律职业资格' };
     }
 
+    // 「其他要求」里的专项资格：留空 = 不判断；选「没有」时排除要求它的职位
+    if (profile.accountingCert === 'none' && rec.flags.accounting) {
+      return { ok: false, why: '没有会计/审计资格' };
+    }
+    if (profile.computerCert === 'none' && rec.flags.computer) {
+      return { ok: false, why: '没有计算机资格' };
+    }
+    if (profile.disabilityCert === 'none' && rec.flags.disability) {
+      return { ok: false, why: '不是残疾人专项对象' };
+    }
+
     if (profile.english === '无' && (rec.flags.cet4 || rec.flags.cet6)) {
       return { ok: false, why: '要求英语等级' };
     }
@@ -496,7 +508,8 @@
   /** 除浏览筛选外，是否填了任何「我的条件」 */
   function personalActive(p) {
     return !!(p.level || p.degree || p.politics || p.gender || p.gradStatus ||
-              p.hukou || p.legalCert || p.english || p.majorActive);
+              p.hukou || p.legalCert || p.english || p.majorActive ||
+              p.accountingCert || p.computerCert || p.disabilityCert);
   }
 
   const SORTERS = {
@@ -649,6 +662,9 @@
           }
         }
         for (const lei of (dicts.nameToLei || {})[bare] || []) add(cands, lei, bare, 2);
+        // 国考码表补充：这类专业名和类目名没有共同前缀（数据科学与大数据技术 / 计算机类），
+        // 只能靠代码前缀对上号
+        for (const lei of (dicts.majorClass || {})[bare] || []) add(cands, lei, bare, 2);
         // 最后兜底：专业名与「类目名去掉类字」共享前缀
         for (const [lei] of dicts.leiVocab) {
           const stem = lei.slice(0, -1);
