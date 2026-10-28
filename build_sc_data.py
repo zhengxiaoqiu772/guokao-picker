@@ -2,20 +2,28 @@
 """
 把四川省考职位表 .xlsx 编译成网页可直接加载的数据文件 data/sc_positions.js
 
-用法:  python -I build_sc_data.py "四川省2027年度公开考试录用公务员职位情况表).xlsx"
+用法:  python -I build_sc_data.py "2027四川省考岗位汇总表.xlsx" [原表.xlsx]
 
 输出:  data/sc_positions.js   ->  window.SC_DATA = {...}
 
 与 build_data.py（国考）的分工相同：这里只做「抽取 + 压缩」，
 专业分词、资格判定、标签推断全部放在 sc_match.js 里，避免两套逻辑漂移。
 
-这份表的结构和国考不一样，三点必须单独处理：
-  * 63 个 sheet，每个 sheet 表头行数不同（有的第 3 行才是表头），
-    要按「职位编码」定位表头，不能写死行号。
-  * 列集合有 3 种：多数 27 列；南充市-参照管理 多一列「审核单位」；
-    成都/眉山的 4 个 sheet 少 6 列（三个加试科目、体能测评、考察比例等）。
-    所以按表头名字取值，缺的补空串。
-  * 每个 sheet 末尾有一行「说明：招录职位…」，职位编码不是数字，按此过滤。
+数据源是《2027四川省考岗位汇总表》：6 个 sheet 按考试类目分，4,561 个职位。
+它比原来的《…职位情况表》63 个 sheet 那份多 560 个（定向公务员 276、监狱 218、
+戒毒 9、公安 51、特警 6），重合的 4,001 条逐字段一致，所以以汇总表为唯一来源。
+
+这份表的结构上要注意四点：
+  * 表头不在固定行：定向公务员那张第 1 行是说明、第 2 行才是表头，
+    所以按「职位编码」定位表头，不能写死行号。
+  * 列名和原表不一致：市（州）/ 录用名额 / 招考对象 / 联系方式 / 招录职位，
+    在 SOURCE_ALIASES 里映射到统一列名。
+  * 加试、体能这几列按类目拆开了：警察那张齐全，法院只有体能，综合/司法行政/定向
+    一个都没有。缺列时补「否」——原表 4,001 行里这些组合本来就全是「否」，
+    唯一的例外是定向那 276 行，那里确实没列，留空。
+  * 定向公务员只有 9 列：没有学历、学位、专业、政治面貌，工具判不了，
+    所以单独标成「定向招录」，不参与硬条件判断（见 sc_match.js 的 matchRow）。
+  * 可选的第 2 个参数是原表，用来补回「审核单位」——汇总表丢了南充 76 行的这一列。
 """
 
 import json
@@ -46,6 +54,12 @@ COLUMNS = [
 # 原表表头（去掉换行后） -> 输出列名
 SOURCE_ALIASES = {
     "地区、部门": "市州",
+    "市（州）": "市州",
+    "录用名额": "招录名额",
+    "招考对象": "考录对象",
+    "联系方式": "咨询电话",
+    # 定向那张表里「招录机关」是区县，「招录职位」才是具体单位，对应一般表的「内设机构」
+    "招录职位": "内设机构",
     "笔试、面试成绩占比": "成绩占比",
     "笔试加试科目一（专业科目）": "加试专业",
     "笔试加试科目二（少数民族语言）": "加试民族语言",
@@ -54,7 +68,13 @@ SOURCE_ALIASES = {
     "单位驻地是否在少数民族自治州、自治县": "民族自治州驻地",
 }
 
-SYSTEMS = ("人民警察", "参照管理", "司法行政", "法院系统", "检察院系统", "省级机关")
+SYSTEMS = ("人民警察", "参照管理", "司法行政", "法院系统", "检察院系统",
+           "省级机关", "监狱系统", "戒毒系统", "定向公务员")
+
+# 汇总表里「警察、监狱戒毒」一张 sheet 混了四个系统，按职位编码前缀分开；
+# 「法院检察院」同理。前缀对应关系是拿原表 63 个 sheet 的划分核对出来的。
+SHEET_BY_PREFIX = {"29": "监狱系统", "42": "戒毒系统", "43": "人民警察", "81": "人民警察"}
+AUTONOMOUS = ("阿坝州", "甘孜州", "凉山州")
 
 # 类目名里不允许出现的字，挡住「本科专业为电子信息类」这种误切
 LEI_STOPWORDS = ("本科", "研究生", "硕士", "博士", "专业", "学历", "学位", "或", "和", "及", "的", "为", "须", "是", "、")
@@ -103,7 +123,9 @@ def extract_major(raw):
             start = match.end()
             if is_lei(cand):
                 leis.add(cand)
-    return leis
+    # 排序后返回：set 的迭代顺序随 PYTHONHASHSEED 变，会让计数相同的类目在
+    # 词表里互相调换位置，两次构建出来的文件因此对不上（内容等价，只是顺序）。
+    return sorted(leis)
 
 
 def extract_names(raw):
@@ -121,7 +143,7 @@ def extract_names(raw):
             if piece in ("不限", "二级学科") or is_lei(piece):
                 continue
             names.add(piece)
-    return names
+    return sorted(names)  # 同上：排序后输出，构建才可复现
 
 
 def common_prefix_len(a, b):
@@ -167,8 +189,25 @@ def load_gk_class_hints(sc_text, lei_set):
     return {name: sorted(leis) for name, leis in hints.items() if len(leis) == 1}
 
 
-def system_of(sheet_name):
-    """sheet 名 -> 系统类别。法院/检察院/省级机关是独立 sheet，其余按后缀。"""
+def system_of(sheet_name, code):
+    """sheet 名（+ 职位编码前缀）-> 系统类别。
+
+    汇总表按考试类目分 sheet，类目比系统粗，所以两张混装的 sheet 再按编码前缀拆：
+    33 法院、34 检察院、29 监狱、42 戒毒、43 公安、81 特警。
+    原表 63 个 sheet 的老名字是「市州-人民警察」这种，仍按后缀认，两边都能跑。
+    """
+    if sheet_name == "综合、县乡":
+        return "参照管理"
+    if sheet_name == "省直机关":
+        return "省级机关"
+    if sheet_name == "司法行政":
+        return "司法行政"
+    if sheet_name == "法院检察院":
+        return "法院系统" if code[:2] == "33" else "检察院系统"
+    if sheet_name == "警察、监狱戒毒":
+        return SHEET_BY_PREFIX.get(code[:2], "人民警察")
+    if sheet_name == "定向公务员":
+        return "定向公务员"
     if sheet_name in ("法院系统", "检察院系统", "省级机关"):
         return sheet_name
     for suffix in ("人民警察", "参照管理", "司法行政"):
@@ -177,14 +216,51 @@ def system_of(sheet_name):
     return sheet_name
 
 
+def load_review_units(path):
+    """从原表补「审核单位」：只有「南充市-参照管理」那张有这一列，76 行有值。
+
+    汇总表按类目重排后把这列丢了。它是受理审核的区县（顺庆区 / 高坪区 / …），
+    不等于工作地点——工作地点在备注里。文件不在就返回空表，不影响构建。
+    """
+    if not path or not os.path.exists(path):
+        return {}
+    book = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    out = {}
+    for ws in book.worksheets:
+        sheet_rows = list(ws.iter_rows(values_only=True))
+        header = None
+        for i, row in enumerate(sheet_rows):
+            vals = [header_key(v) for v in row]
+            if "职位编码" in vals:
+                header = vals
+                header_at = i
+                break
+        if header is None or "审核单位" not in header:
+            continue
+        ci, ri = header.index("职位编码"), header.index("审核单位")
+        for row in sheet_rows[header_at + 1:]:
+            if len(row) <= max(ci, ri):
+                continue
+            code, unit = clean(row[ci]), clean(row[ri])
+            if code.isdigit() and unit:
+                out[code] = unit
+    book.close()
+    return out
+
+
 def main():
     if len(sys.argv) < 2:
-        print("用法: python -I build_sc_data.py <四川省考职位表.xlsx>")
+        print("用法: python -I build_sc_data.py <汇总表.xlsx> [原表.xlsx]")
         return 1
     xlsx_path = sys.argv[1]
     if not os.path.exists(xlsx_path):
         print("找不到文件: %s" % xlsx_path)
         return 1
+    # 第二个参数可选：原表里多一列「审核单位」，补回来
+    legacy_path = sys.argv[2] if len(sys.argv) > 2 else None
+    review_units = load_review_units(legacy_path)
+    if legacy_path:
+        print("审核单位: 从原表补回 %d 行" % len(review_units))
 
     book = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
 
@@ -212,6 +288,10 @@ def main():
                 continue
             index[SOURCE_ALIASES.get(name, name)] = i
 
+        # 这类 sheet 按类目拆了列：没放加试/体能列就说明这个系统没有这几项加试，
+        # 原表 4,001 行里这些组合全是「否」。定向公务员那张是真的没列，留空。
+        fill_no = ws.title != "定向公务员"
+
         sheet_count = 0
         for row in sheet_rows[header_at + 1:]:
             if not row or all(v is None or str(v).strip() == "" for v in row):
@@ -235,7 +315,18 @@ def main():
                 continue
 
             values["市州"] = clean(row[index["市州"]]) if "市州" in index else ""
-            values["系统类别"] = system_of(ws.title)
+            values["系统类别"] = system_of(ws.title, code)
+
+            if fill_no:
+                for col in ("加试专业", "加试民族语言", "加试心理测试", "体能测评"):
+                    if col not in index:
+                        values[col] = "否"
+            # 驻地这一列定向那张也没有，但三个自治州整州都在自治范围内，
+            # 按市州就能确定；其余市州的自治县（北川、峨边、马边）不猜，留空
+            if "民族自治州驻地" not in index and values["市州"] in AUTONOMOUS:
+                values["民族自治州驻地"] = "是"
+            if review_units.get(code):
+                values["审核单位"] = review_units[code]
             rows.append([values[c] for c in COLUMNS])
             sheet_count += 1
 
@@ -354,8 +445,8 @@ def main():
     print("地区: %s" % " / ".join("%s(%d)" % (n, c) for n, c in regions))
     print("系统: %s" % " / ".join("%s(%d)" % (n, c) for n, c in systems))
 
-    if total != 4001:
-        print("!! 警告: 职位数 %d 与基准 4001 不一致，请核对源表" % total)
+    if total != 4561:
+        print("!! 警告: 职位数 %d 与基准 4561 不一致，请核对源表" % total)
         return 2
     return 0
 

@@ -15,7 +15,9 @@
   const GK = window.GKMatch;
   const $ = function (id) { return document.getElementById(id); };
   const STORE_KEY = 'sc2027.state.v1';
-  const SAVED_KEY = 'sc2027.saved.v1';
+  // 收藏存职位编码而不是数组序号：重新构建数据后行序会变，
+  // 序号会把收藏指到别的职位上（v1 存的就是序号，换表后只能作废）
+  const SAVED_KEY = 'sc2027.saved.v2';
   const CAP_STEP = 200;
   const reduceMotion = window.matchMedia &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -135,7 +137,10 @@
       localStorage.setItem(STORE_KEY, JSON.stringify({
         v: 1, profile: state.profile, sort: state.sort, distTab: state.distTab,
       }));
-      localStorage.setItem(SAVED_KEY, JSON.stringify(Array.from(saved)));
+      localStorage.setItem(SAVED_KEY, JSON.stringify(Array.from(saved).map(function (id) {
+        const r = records[id];
+        return r && r['职位编码'];
+      }).filter(Boolean)));
     } catch (e) { /* 隐私模式无存储时静默降级 */ }
   }
 
@@ -143,9 +148,13 @@
     let store = {};
     try {
       store = JSON.parse(localStorage.getItem(STORE_KEY) || '{}') || {};
-      JSON.parse(localStorage.getItem(SAVED_KEY) || '[]').forEach(function (id) {
-        if (typeof id === 'number') saved.add(id);
+      const byCode = new Map();
+      records.forEach(function (r) { byCode.set(String(r['职位编码']), r.id); });
+      JSON.parse(localStorage.getItem(SAVED_KEY) || '[]').forEach(function (code) {
+        const id = byCode.get(String(code));
+        if (id !== undefined) saved.add(id);
       });
+      localStorage.removeItem('sc2027.saved.v1');  // 旧版按序号存的收藏，换表后已无意义
     } catch (e) { /* 存档坏了就当没有 */ }
 
     const p = Object.assign({}, SC.DEFAULT_PROFILE, store.profile || {});
@@ -180,7 +189,8 @@
       const value = it[0];
       const label = it[1];
       const count = it[2] || 0;
-      return '<label class="check"><input type="checkbox" name="' + name +
+      // title 放原文：筛选写成短语，鼠标停一下能看全
+      return '<label class="check" title="' + esc(value) + '"><input type="checkbox" name="' + name +
         '" value="' + esc(value) + '"> ' + esc(label) +
         (count ? ' <span class="num" style="color:#A9A69C">' + count + '</span>' : '') +
         '</label>';
@@ -262,9 +272,10 @@
   }
 
   function buildSidebar() {
-    // 户籍地：21 个市州 + 四川省外。「省直机关」是招录单位口径，不是一个地方，排除。
+    // 户籍地：21 个市州 + 四川省外。汇总表里「省直机关」「监狱系统」「戒毒系统」
+    // 也占着市州这一列，但它们不是户籍地，按「市州」结尾筛掉
     $('f-hukou').innerHTML = '<option value="">不填</option>' +
-      countsOf('市州').filter(function (e) { return e[0] !== '省直机关'; })
+      countsOf('市州').filter(function (e) { return /[市州]$/.test(e[0]); })
         .map(function (e) {
           return '<option value="' + esc(e[0]) + '">' + esc(e[0]) + '</option>';
         }).join('') +
@@ -297,9 +308,25 @@
     $('f-scopes').innerHTML = checkboxHTML(countsOf('考录范围').map(function (e) {
       return [e[0], e[0], e[1]];
     }), 'scopes');
-    $('f-targets').innerHTML = checkboxHTML(countsOf('考录对象').map(function (e) {
-      return [e[0], SC.TARGET_LABELS[e[0]] || e[0], e[1]];
-    }), 'targets');
+    // 考录对象：原文是整句，筛选项只写短语。同义或按县拆开的写法合并成一项
+    // （9 个按县的村社区干部、两种措辞的「应届＋社会·公安院校除外」），
+    // 否则侧栏光这一栏就十几行、还出现两个一模一样的名字
+    const targetCounts = countsOf('考录对象');
+    const groupedTargets = new Set();
+    const targetItems = [];
+    SC.TARGET_GROUPS.forEach(function (g) {
+      let sum = 0;
+      targetCounts.forEach(function (e) {
+        if (g.test(e[0])) { sum += e[1]; groupedTargets.add(e[0]); }
+      });
+      if (sum) targetItems.push([g.key, g.key, sum]);
+    });
+    targetCounts.forEach(function (e) {
+      if (groupedTargets.has(e[0])) return;
+      targetItems.push([e[0], SC.targetLabel(e[0]), e[1]]);
+    });
+    targetItems.sort(function (a, b) { return b[2] - a[2]; });
+    $('f-targets').innerHTML = checkboxHTML(targetItems, 'targets');
     $('f-edureqs').innerHTML = checkboxHTML(countsOf('学历').map(function (e) {
       return [e[0], e[0], e[1]];
     }), 'eduReqs');
@@ -576,6 +603,17 @@
       }
     }
 
+    // 定向招录整类不参与判断：不是「你符不符合」，是汇总表没给这类职位列学历和专业
+    const directed = lastResult.stats.excluded['定向招录，限特定群体'] || 0;
+    if (directed) {
+      out.push({
+        tone: 'info',
+        text: '另有 <b class="num">' + directed + '</b> 个<b>定向招录</b>职位没有参与判断：' +
+          '它们限服务基层项目人员、优秀村社区干部、工人农民、退役士兵等特定群体，' +
+          '汇总表也没给这类职位列学历和专业。想单独看，在上方「系统类别」里勾「定向公务员」。',
+      });
+    }
+
     // 留空的项不排除，但结果里确实混着相应要求。逐条各占一栏会把通知区堆到半屏，
     // 合成一条，数量仍然逐个写明。
     const gaps = [];
@@ -781,6 +819,11 @@
     ['政治面貌', '政治面貌'], ['拟任职务', '拟任职务'],
   ];
 
+  /**
+   * 卡片信息格：只列表里真写了的字段。
+   * 定向招录那张表只有 9 列，没有考试类别、学历、学位、政治面貌、拟任职务、考录范围，
+   * 补个「—」会被读成「不限」，所以整格省略；页面顶部另有说明。
+   */
   function gridHTML(r) {
     let out = '';
     for (let i = 0; i < GRID_ROWS.length; i += 2) {
@@ -788,14 +831,18 @@
         const pair = GRID_ROWS[i + k];
         if (!pair) break;
         const raw = r[pair[1]];
+        if (raw === '' || raw == null) continue;
         const value = /^\d+$/.test(String(raw))
-          ? '<span class="num">' + esc(raw) + '</span>' : esc(raw || '—');
+          ? '<span class="num">' + esc(raw) + '</span>' : esc(raw);
         out += '<dt>' + esc(pair[0]) + '</dt><dd>' + value + '</dd>';
       }
     }
-    out += '<dt>考录范围</dt><dd class="wide">' + esc(r['考录范围'] || '—') + '</dd>';
-    out += '<dt>考录对象</dt><dd class="wide">' + esc(r['考录对象'] || '—') + '</dd>';
-    return '<dl class="card__grid">' + out + '</dl>';
+    // 考录范围/考录对象是整段原文，单独成一行网格，免得挤在四列里
+    let wide = '';
+    if (r['考录范围']) wide += '<dt>考录范围</dt><dd>' + esc(r['考录范围']) + '</dd>';
+    if (r['考录对象']) wide += '<dt>考录对象</dt><dd>' + esc(r['考录对象']) + '</dd>';
+    return (out ? '<dl class="card__grid">' + out + '</dl>' : '') +
+      (wide ? '<dl class="card__grid card__grid--wide">' + wide + '</dl>' : '');
   }
 
   /**
@@ -869,17 +916,22 @@
         '</div>' +
       '</div>' +
       gridHTML(r) +
-      '<div class="card__major">' +
-        '<span class="card__major-label">专业栏原文</span>' +
-        '<p class="card__major-text">' + highlight(rawMajor, tokens) + '</p>' +
-        (r.reasons && r.reasons.length
-          ? '<p class="card__why">' + esc(r.reasons.join('；')) + '</p>' : '') +
-        (r.matchFlags && r.matchFlags.length
-          ? r.matchFlags.map(function (f) {
-              return '<p class="card__why" style="color:#6B6F6A">' + esc(f) + '</p>';
-            }).join('')
-          : '') +
-      '</div>' +
+      (rawMajor || (r.reasons && r.reasons.length) ||
+       (r.matchFlags && r.matchFlags.length)
+        ? '<div class="card__major">' +
+            (rawMajor
+              ? '<span class="card__major-label">专业栏原文</span>' +
+                '<p class="card__major-text">' + highlight(rawMajor, tokens) + '</p>'
+              : '') +
+            (r.reasons && r.reasons.length
+              ? '<p class="card__why">' + esc(r.reasons.join('；')) + '</p>' : '') +
+            (r.matchFlags && r.matchFlags.length
+              ? r.matchFlags.map(function (f) {
+                  return '<p class="card__why" style="color:#6B6F6A">' + esc(f) + '</p>';
+                }).join('')
+              : '') +
+          '</div>'
+        : '') +
       tagsHTML(r) +
       '<div class="card__foot">' +
         '<button type="button" class="card__more">职位简介 · 要求 · 联系方式</button>' +
@@ -1011,11 +1063,11 @@
         html += m.ok
           ? '<td><span style="color:#A8201A;font-family:var(--serif);font-weight:700">' +
               esc(SC.TIERS[m.tier].label) + '</span>' +
-              (m.reasons.length
+              (m.reasons && m.reasons.length
                 ? '<div style="font-size:12px;color:#6B6F6A">' +
                   esc(m.reasons.join('；')) + '</div>' : '') + '</td>'
           : '<td><span style="color:#6B6F6A">不符合当前条件</span>' +
-              (m.flags.length
+              (m.flags && m.flags.length
                 ? '<div style="font-size:12px;color:#6B6F6A">' +
                   esc(m.flags.join('；')) + '</div>' : '') + '</td>';
       } else if (SC.personalActive(profile)) {
@@ -1258,13 +1310,32 @@
    * 启动
    * ===================================================================*/
 
+  function failLoad(title, hint) {
+    $('loading').innerHTML = '<p class="loading__title">' + esc(title) + '</p>' +
+      '<p class="loading__hint">' + hint + '</p>' +
+      '<p class="loading__hint">如果改过数据文件，按 Ctrl+F5 强制刷新一次。</p>';
+  }
+
   function init() {
     DATA = window.SC_DATA;
     if (!DATA || !DATA.meta) {
-      $('loading').innerHTML = '<p class="loading__title">数据没能载入</p>' +
-        '<p class="loading__hint">请确认 data/sc_positions.js 与 sc.html 在同一目录下。</p>';
+      failLoad('数据没能载入', '请确认 data/sc_positions.js 与 sc.html 在同一目录下。');
       return;
     }
+    try {
+      initBody();
+    } catch (err) {
+      // 遮罩底下藏着一句报错就没人看得见了：把原始信息和出错位置摊在页面上
+      const frame = String(err && err.stack || '').split('\n')
+        .filter(function (l) { return /sc_app\.js|sc_match\.js|match\.js/.test(l); })[0] || '';
+      failLoad('页面初始化出错', esc(String(err && err.message || err)) +
+        (frame ? '<br><span class="num">' + esc(frame.trim()) + '</span>' : ''));
+      throw err;
+    }
+    $('loading').hidden = true;
+  }
+
+  function initBody() {
     records = SC.unpack(DATA);
 
     restore();
@@ -1274,8 +1345,6 @@
     bind();
     render();
     renderSuggestion();
-
-    $('loading').hidden = true;
   }
 
   function boot() {
@@ -1287,14 +1356,17 @@
     }
 
     const s = document.createElement('script');
-    s.src = 'data/sc_positions.js';
+    // 带一个时间戳参数：Edge/Chrome 对 file:// 也走启发式缓存，重新构建数据后
+    // 普通刷新可能还拿旧文件。每次加载都当作新地址，就不会读到过期的那份
+    s.src = 'data/sc_positions.js?v=' + Date.now();
     s.onload = function () {
       requestAnimationFrame(function () { requestAnimationFrame(start); });
       setTimeout(start, 400);
     };
     s.onerror = function () {
       $('loading').innerHTML = '<p class="loading__title">找不到 data/sc_positions.js</p>' +
-        '<p class="loading__hint">先运行：python build_sc_data.py "四川省2027年度公开考试录用公务员职位情况表).xlsx"</p>';
+        '<p class="loading__hint">先运行：python build_sc_data.py "2027四川省考岗位汇总表.xlsx" ' +
+        '"四川省2027年度公开考试录用公务员职位情况表).xlsx"</p>';
     };
     document.body.appendChild(s);
     $('loading-hint').textContent = '读取 data/sc_positions.js …';

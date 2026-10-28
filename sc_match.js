@@ -44,6 +44,8 @@
       desc: '要求计算机技术与软件资格或计算机等级考试证书' },
     { key: 'disability', label: '残疾人专项', tone: 'hard',
       desc: '要求持有效《中华人民共和国残疾人证》，通常是定向岗位' },
+    { key: 'directed', label: '定向招录', tone: 'hard',
+      desc: '定向招录职位，限服务基层项目人员、优秀村社区干部、工人农民、退役士兵等特定群体；汇总表只给这类职位列了 9 个字段，没有学历和专业' },
     { key: 'vision', label: '特殊视力标准', tone: 'warn',
       desc: '执行公务员录用体检特殊标准中的矫正视力标准' },
     { key: 'specialPolice', label: '加试特警技能', tone: 'warn',
@@ -83,21 +85,68 @@
 
   // 卡片上的标签顺序：硬条件在前，环境提示在后
   const TAG_ORDER = [
-    'male', 'female', 'legalA', 'legal', 'disability', 'cet6', 'cet4',
+    'directed', 'male', 'female', 'legalA', 'legal', 'disability', 'cet6', 'cet4',
     'freshOnly', 'ground2', 'accounting', 'computer', 'vision', 'specialPolice',
     'policeSchool', 'hukou', 'service5', 'bachelor',
     'physical', 'psych', 'specialSubject', 'minorityLang', 'autonomous',
     'softmale', 'softfemale', 'referenced',
   ];
 
+  // 「考录对象」原文是整句，侧栏筛选只写短语；原文放在勾选框的 title 里
   const TARGET_LABELS = {
     '应届高校毕业生': '仅限应届',
     '应届高校毕业生和符合条件的社会在职、非在职人员': '应届＋社会人员',
-    '应届高校毕业生（不含公安院校公安专业应届毕业生）': '仅限应届（公安院校应届除外）',
+    '应届高校毕业生（不含公安院校公安专业应届毕业生）': '仅限应届（公安除外）',
     '应届高校毕业生（不含公安院校公安专业应届毕业生）和符合条件的社会在职、非在职人员':
-      '应届＋社会（公安院校应届除外）',
+      '应届＋社会（公安除外）',
+    '应届高校毕业生（不含公安院校公安专业应届毕业生）和符合职位要求的社会在职、非在职人员':
+      '应届＋社会（公安除外）',
     '两年以上基层工作经历的人员': '两年以上基层经历',
+    '服务基层项目人员、四川省户籍或在四川服役的高校毕业生退役士兵，以及安排工作的退役军士和义务兵':
+      '服务基层项目人员等',
+    '服务基层项目人员、本县事业编制人员（含经组织选派在本县从事脱贫攻坚等相关工作1年以上的事业编制人员）、四川省户籍或在四川服役的高校毕业生退役士兵、本市（州）户籍或在本市（州）服役的退役士兵，以及安排工作的退役军士和义务兵':
+      '服务基层·本县事业编',
+    '优秀工人、农民': '优秀工人农民',
+    '安排工作的退役军士和义务兵': '安排工作的退役士兵',
+    '优秀村（社区）干部、第一书记': '优秀村社区干部',
   };
+
+  // 「面向马尔康市、金川县、小金县的优秀村（社区）干部、第一书记」这种按县划的
+  // 有 9 条，每条就 1 个职位，侧栏里合并成一项
+  const COUNTY_CADRE_GROUP = '面向本县（市）村干部';
+  const COUNTY_CADRE_RE = /^面向.+村（社区）干部、第一书记$/;
+  // 两种措辞其实是一回事：191 行写「符合条件」，6 个特警写「符合职位要求」
+  const POLICE_SOCIAL_GROUP = '应届＋社会（公安除外）';
+  const POLICE_SOCIAL_RE = /^应届高校毕业生（不含公安院校公安专业应届毕业生）和符合(条件|职位要求)的社会在职、非在职人员$/;
+
+  function isCountyCadre(value) {
+    return COUNTY_CADRE_RE.test(value || '');
+  }
+
+  function targetLabel(value) {
+    if (value === COUNTY_CADRE_GROUP) return value;
+    if (TARGET_LABELS[value]) return TARGET_LABELS[value];
+    const m = /^面向(.+?)的优秀村（社区）干部、第一书记$/.exec(value || '');
+    if (m) {
+      const counties = m[1].split('、');
+      return '面向' + counties[0] + '等 ' + counties.length + ' 县村干部';
+    }
+    return value || '';
+  }
+
+  /** 侧栏里合并显示的几组考录对象；key 当勾选值用，不会和原文撞名 */
+  const TARGET_GROUPS = [
+    { key: COUNTY_CADRE_GROUP, test: isCountyCadre },
+    { key: POLICE_SOCIAL_GROUP, test: (v) => POLICE_SOCIAL_RE.test(v || '') },
+  ];
+
+  /** 考录对象是否命中筛选：合并项覆盖组内所有写法 */
+  function targetHit(set, value) {
+    if (set.has(value)) return true;
+    return TARGET_GROUPS.some(function (g) {
+      return set.has(g.key) && g.test(value);
+    });
+  }
 
   const FLAG_FIELDS = {
     physical: '体能测评',
@@ -172,6 +221,9 @@
       hukou: /户籍|生源/.test(text),
       service5: /最低服务期|最低服务年限/.test(text),
       bachelor: /本科阶段|本科为普通高等学校/.test(text),
+      // 定向招录是另一条赛道：汇总表那张只有 9 列，没有学历、学位、专业，
+      // 工具判不了，靠系统类别直接认
+      directed: rec['系统类别'] === '定向公务员',
       referenced: /参照管理/.test(rec['备注'] || ''),
       // 考录对象是结构化字段，比从「其他要求」里猜可靠
       freshOnly: /应届/.test(target) && !/社会在职|社会人员/.test(target),
@@ -391,6 +443,14 @@
 
   /** 判定一行。返回 {ok, why?, tier?, reasons?, flags?} */
   function matchRow(rec, profile) {
+    // 定向招录：限服务基层项目人员、优秀村社区干部、工人农民、退役士兵等特定群体，
+    // 汇总表里也没有列这 276 行的学历和专业。不是「你符不符合」，是工具判不了，
+    // 所以填了个人条件就一律排除并写明原因，不让它们混进「可报」里。
+    // 浏览模式（什么都没填）不判断，照常全部列出。
+    if (rec.flags.directed && personalActive(profile)) {
+      return { ok: false, why: '定向招录，限特定群体' };
+    }
+
     if (!educationOk(rec['学历'], profile.level)) return { ok: false, why: '学历不符' };
     if (!degreeOk(rec['学位'], profile.degree)) return { ok: false, why: '学位不符' };
     if (!politicsOk(rec['政治面貌'], profile.politics)) {
@@ -541,7 +601,7 @@
       else if (p.systemSet.size && !p.systemSet.has(rec['系统类别'])) why = '系统类别不符';
       else if (p.examSet.size && !p.examSet.has(rec['考试类别'])) why = '考试类别不符';
       else if (p.scopeSet.size && !p.scopeSet.has(rec['考录范围'])) why = '考录范围不符';
-      else if (p.targetSet.size && !p.targetSet.has(rec['考录对象'])) why = '考录对象不符';
+      else if (p.targetSet.size && !targetHit(p.targetSet, rec['考录对象'])) why = '考录对象不符';
       else if (p.eduReqSet.size && !p.eduReqSet.has(rec['学历'])) why = '学历要求不符';
       else if (p.degreeReqSet.size && !p.degreeReqSet.has(rec['学位'])) why = '学位要求不符';
       else if (p.politicsReqSet.size && !p.politicsReqSet.has(rec['政治面貌'])) why = '政治面貌要求不符';
@@ -665,10 +725,19 @@
         // 国考码表补充：这类专业名和类目名没有共同前缀（数据科学与大数据技术 / 计算机类），
         // 只能靠代码前缀对上号
         for (const lei of (dicts.majorClass || {})[bare] || []) add(cands, lei, bare, 2);
-        // 最后兜底：专业名与「类目名去掉类字」共享前缀
+        // 最后兜底：专业名与「类目名去掉类字」共享前缀。
+        // 「金融学」能同时对上「金融学类」和「金融类」，取更长的那个，
+        // 否则每多一个短类目名就多一个候选
+        const prefixed = [];
         for (const [lei] of dicts.leiVocab) {
           const stem = lei.slice(0, -1);
-          if (stem.length >= 2 && bare.indexOf(stem) === 0) add(cands, lei, bare, 3);
+          if (stem.length >= 2 && bare.indexOf(stem) === 0) prefixed.push({ lei: lei, stem: stem });
+        }
+        for (const c of prefixed) {
+          const longer = prefixed.some(function (o) {
+            return o.stem.length > c.stem.length && o.stem.indexOf(c.stem) === 0;
+          });
+          if (!longer) add(cands, c.lei, bare, 3);
         }
       }
 
@@ -774,6 +843,10 @@
     TIERS: TIERS,
     TAG_DEFS: TAG_DEFS,
     TARGET_LABELS: TARGET_LABELS,
+    targetLabel: targetLabel,
+    isCountyCadre: isCountyCadre,
+    TARGET_GROUPS: TARGET_GROUPS,
+    COUNTY_CADRE_GROUP: COUNTY_CADRE_GROUP,
     FLAG_FIELDS: FLAG_FIELDS,
     CSV_COLUMNS: CSV_COLUMNS,
     DEFAULT_PROFILE: DEFAULT_PROFILE,

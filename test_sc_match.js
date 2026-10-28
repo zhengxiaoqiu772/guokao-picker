@@ -42,11 +42,11 @@ const t0 = Date.now();
 const records = SC.unpack(DATA);
 const loadMs = Date.now() - t0;
 
-check('职位总数', records.length, 4001);
-check('招录总人数', records.reduce((a, r) => a + r.headcount, 0), 8881);
+check('职位总数', records.length, 4561);
+check('招录总人数', records.reduce((a, r) => a + r.headcount, 0), 10158);
 check('列数', DATA.H.length, 29);
-check('市州数', DATA.regions.length, 22);
-check('系统类别数', DATA.systems.length, 6);
+check('市州数', DATA.regions.length, 24);
+check('系统类别数', DATA.systems.length, 9);
 console.log('  展开耗时 ' + loadMs + ' ms');
 
 /* =====================================================================
@@ -59,53 +59,88 @@ const run = (o, opts) => SC.filterRecords(records, P(o), opts || {});
 
 const browse = run({});
 check('默认是浏览模式', browse.mode, 'browse');
-check('默认列出全部 4,001 个职位', browse.stats.total, 4001);
-check('默认 8,881 人', browse.stats.headcount, 8881);
+check('默认列出全部 4,561 个职位', browse.stats.total, 4561);
+check('默认 10,158 人', browse.stats.headcount, 10158);
 check('浏览结果全部在 all 档', browse.all.every((r) => r.tier === 'all'), true);
 check('浏览模式不编造匹配依据', browse.all.every((r) => r.reasons.length === 0), true);
 
-check('市州筛选：成都 441 个', run({ cities: ['成都市'] }).stats.total, 441);
-check('成都招录 920 人', run({ cities: ['成都市'] }).stats.headcount, 920);
+check('市州筛选：成都 523 个', run({ cities: ['成都市'] }).stats.total, 523);
+check('成都招录 1,243 人', run({ cities: ['成都市'] }).stats.headcount, 1243);
 check('系统筛选：法院系统 253 个', run({ systems: ['法院系统'] }).stats.total, 253);
-check('考试类别：行政执法类 1,607 个', run({ exams: ['行政执法类'] }).stats.total, 1607);
+check('考试类别：行政执法类 1,891 个', run({ exams: ['行政执法类'] }).stats.total, 1891);
 check('考录范围：本省 322 个', run({ scopes: ['本省'] }).stats.total, 322);
-check('考录对象：仅限应届 1,498 个',
-      run({ targets: ['应届高校毕业生'] }).stats.total, 1498);
-check('学历要求：本科及以上 3,670 个', run({ eduReqs: ['本科及以上'] }).stats.total, 3670);
-check('学位要求：学士及以上 3,606 个', run({ degreeReqs: ['学士及以上'] }).stats.total, 3606);
-check('政治面貌要求：中共党员 257 个', run({ politicsReqs: ['中共党员'] }).stats.total, 257);
-check('招录名额 ≥5：309 个', run({ minHeadcount: 5 }).stats.total, 309);
-check('附加项：心理测试 235 个', run({ flags: ['psych'] }).stats.total, 235);
-check('其他要求：限男性 1,094 个', run({ tags: ['male'] }).stats.total, 1094);
+check('考录对象：仅限应届 1,587 个',
+      run({ targets: ['应届高校毕业生'] }).stats.total, 1587);
+check('考录对象：9 个按县职位合并成一项',
+      run({ targets: [SC.COUNTY_CADRE_GROUP] }).stats.total, 9);
+check('考录对象：单条按县写法仍能单独筛',
+      run({ targets: ['面向马尔康市、金川县、小金县的优秀村（社区）干部、第一书记'] }).stats.total, 1);
+check('考录对象短语：长句不原样进侧栏',
+      SC.targetLabel('服务基层项目人员、四川省户籍或在四川服役的高校毕业生退役士兵，以及安排工作的退役军士和义务兵'),
+      '服务基层项目人员等');
+check('考录对象：两种「公安院校除外」措辞合并成 197 个',
+      run({ targets: ['应届＋社会（公安除外）'] }).stats.total, 197);
+check('考录对象：合并项不影响按原句单独筛',
+      [run({ targets: ['应届高校毕业生（不含公安院校公安专业应届毕业生）和符合条件的社会在职、非在职人员'] }).stats.total,
+       run({ targets: ['应届高校毕业生（不含公安院校公安专业应届毕业生）和符合职位要求的社会在职、非在职人员'] }).stats.total],
+      [191, 6]);
+check('学历要求：本科及以上 3,915 个', run({ eduReqs: ['本科及以上'] }).stats.total, 3915);
+check('学位要求：学士及以上 3,821 个', run({ degreeReqs: ['学士及以上'] }).stats.total, 3821);
+check('政治面貌要求：中共党员 258 个', run({ politicsReqs: ['中共党员'] }).stats.total, 258);
+check('招录名额 ≥5：370 个', run({ minHeadcount: 5 }).stats.total, 370);
+check('附加项：心理测试 286 个', run({ flags: ['psych'] }).stats.total, 286);
+check('其他要求：限男性 1,289 个', run({ tags: ['male'] }).stats.total, 1289);
 check('其他要求：参照管理 1,312 个', run({ tags: ['referenced'] }).stats.total, 1312);
 check('多处筛选取交集：成都 + 法院 37 个',
       run({ cities: ['成都市'], systems: ['法院系统'] }).stats.total, 37);
-check('招录名额下限叠加：成都 ≥5 人 24 个',
-      run({ cities: ['成都市'], minHeadcount: 5 }).stats.total, 24);
+check('招录名额下限叠加：成都 ≥5 人 47 个',
+      run({ cities: ['成都市'], minHeadcount: 5 }).stats.total, 47);
+
+check('定向招录 276 个，全部标了标签',
+      [records.filter((r) => r.flags.directed).length,
+       records.filter((r) => r.tags.indexOf('directed') >= 0).length], [276, 276]);
+check('浏览模式照常列出定向招录', browse.all.some((r) => r.flags.directed), true);
+check('定向招录：没有学历列', records.every((r) => !r.flags.directed || !r['学历']), true);
+check('定向招录：加试、体能留空（表里没列）',
+      records.filter((r) => r.flags.directed && r['加试专业'] === '' && r['体能测评'] === '').length, 276);
+check('非定向的加试列已补「否」',
+      records.filter((r) => !r.flags.directed && !r['加试专业']).length, 0);
+check('定向招录：自治州 66 个按市州补上驻地',
+      records.filter((r) => r.flags.directed && r.flags.autonomous).length, 66);
+check('定向招录：非自治州不猜驻地',
+      records.filter((r) => r.flags.directed && !r.flags.autonomous &&
+        r['民族自治州驻地'] === '是').length, 0);
+check('填了个人条件后定向招录被排除',
+      run({ level: '本科' }).stats.excluded['定向招录，限特定群体'], 276);
+check('定向招录不进「可报」', run({ level: '本科' }).stats.total, 3945);
+check('审核单位从原表补回 76 行', records.filter((r) => r['审核单位']).length, 76);
+check('系统类别含监狱、戒毒、定向',
+      ['监狱系统', '戒毒系统', '定向公务员'].every((k) =>
+        DATA.systems.some((e) => e[0] === k)), true);
 
 check('浏览模式下的排除原因会记账',
-      run({ cities: ['成都市'] }).stats.excluded['市州不符'], 3560);
+      run({ cities: ['成都市'] }).stats.excluded['市州不符'], 4038);
 
 /* =====================================================================
  * 三、个人条件：留空不排除
  * ===================================================================*/
 section('三、个人条件');
 
-check('只填学历：大专 26 个', run({ level: '大专' }).stats.total, 26);
-check('只填学历：本科 3,696 个', run({ level: '本科' }).stats.total, 3696);
-check('只填学历：硕士 4,001 个', run({ level: '硕士' }).stats.total, 4001);
-check('学历不符计数', run({ level: '本科' }).stats.excluded['学历不符'], 305);
+check('只填学历：大专 30 个', run({ level: '大专' }).stats.total, 30);
+check('只填学历：本科 3,945 个', run({ level: '本科' }).stats.total, 3945);
+check('只填学历：硕士 4,285 个', run({ level: '硕士' }).stats.total, 4285);
+check('学历不符计数', run({ level: '本科' }).stats.excluded['学历不符'], 340);
 
-check('女性：排除 1,094 个限男性职位', run({ gender: '女' }).stats.total, 2907);
-check('男性：排除 922 个限女性职位', run({ gender: '男' }).stats.total, 3079);
+check('女性：排除 1,289 个限男性职位', run({ gender: '女' }).stats.total, 2996);
+check('男性：排除 943 个限女性职位', run({ gender: '男' }).stats.total, 3342);
 
-check('应届：可报 3,986 个', run({ gradStatus: 'fresh' }).stats.total, 3986);
+check('应届：可报 4,270 个', run({ gradStatus: 'fresh' }).stats.total, 4270);
 // 旧版界面分 2025 / 2026 / 2027 三档，localStorage 里可能还存着这几个值
-check('旧值 2027 仍按应届算', run({ gradStatus: '2027' }).stats.total, 3986);
-check('旧值 2025 仍按应届算', run({ gradStatus: '2025' }).stats.total, 3986);
-check('往届：排除 1,578 个仅限应届职位', run({ gradStatus: 'previous' }).stats.total, 2408);
-check('往届（2 年基层）：可报 2,423 个',
-      run({ gradStatus: 'previous2' }).stats.total, 2423);
+check('旧值 2027 仍按应届算', run({ gradStatus: '2027' }).stats.total, 4270);
+check('旧值 2025 仍按应届算', run({ gradStatus: '2025' }).stats.total, 4270);
+check('往届：排除 1,682 个仅限应届职位', run({ gradStatus: 'previous' }).stats.total, 2588);
+check('往届（2 年基层）：可报 2,603 个',
+      run({ gradStatus: 'previous2' }).stats.total, 2603);
 
 // 「应届＋社会人员」那 155 行：身份上谁都能报，只剩公安院校应届的标签
 const bothRec = records.find((r) => r['职位编码'] === '43219001');
@@ -116,19 +151,19 @@ if (bothRec) {
   check('往届也能报该行',
         SC.matchRow(bothRec, SC.buildProfile(P({ gradStatus: 'previous' }))).ok, true);
 }
-check('公安院校应届除外共 235 行',
-      records.filter((r) => r.flags.policeSchool).length, 235);
+check('公安院校应届除外共 292 行',
+      records.filter((r) => r.flags.policeSchool).length, 292);
 
 // 户籍地：只判「考录范围」里的本省 / 本市州
-check('户籍：不填不排除', run({ hukou: '' }).stats.total, 4001);
-check('户籍：四川省外，排除 322 + 94', run({ hukou: 'outside' }).stats.total, 3585);
+check('户籍：不填不排除', run({ hukou: '' }).stats.total, 4561);
+check('户籍：四川省外，排除 322 + 94', run({ hukou: 'outside' }).stats.total, 3869);
 check('四川省外同时排除两类',
       [run({ hukou: 'outside' }).stats.excluded['限本省户籍'],
        run({ hukou: 'outside' }).stats.excluded['限本市州户籍']], [322, 94]);
 check('户籍：成都市，本省照收，只排 94 个其他市州',
-      run({ hukou: '成都市' }).stats.total, 3907);
-check('户籍：阿坝州，本州 31 个照收', run({ hukou: '阿坝州' }).stats.total, 3938);
-check('户籍：凉山州', run({ hukou: '凉山州' }).stats.total, 3912);
+      run({ hukou: '成都市' }).stats.total, 4191);
+check('户籍：阿坝州，本州 63 个照收', run({ hukou: '阿坝州' }).stats.total, 4222);
+check('户籍：凉山州', run({ hukou: '凉山州' }).stats.total, 4196);
 check('只填户籍也进入「符合硬性条件」', run({ hukou: '成都市' }).mode, 'eligible');
 
 const benRec = records.find((r) => r['考录范围'] === '本省');
@@ -141,34 +176,34 @@ check('本市州：本州户籍通过', SC.scopeOk(cityRec, cityRec['市州']), 
 check('本市州：别的市州不通过', SC.scopeOk(cityRec, otherCity), false);
 check('全国范围：哪儿都能报', SC.scopeOk(records.find((r) => r['考录范围'] === '全国'), 'outside'), true);
 
-check('没有法律职业资格：可报 3,512 个',
-      run({ legalCert: 'none' }).stats.total, 3512);
-check('只有非 A 类证书：可报 3,600 个',
-      run({ legalCert: 'other' }).stats.total, 3600);
-check('有 A 类证书：不排除', run({ legalCert: 'A' }).stats.total, 4001);
+check('没有法律职业资格：可报 3,777 个',
+      run({ legalCert: 'none' }).stats.total, 3777);
+check('只有非 A 类证书：可报 3,865 个',
+      run({ legalCert: 'other' }).stats.total, 3865);
+check('有 A 类证书：不排除', run({ legalCert: 'A' }).stats.total, 4285);
 
-check('未过四级：排除 4 个要求英语的职位',
-      run({ english: '无' }).stats.total, 3997);
-check('已过四级：仍够不着六级岗，可报 3,997 个',
-      run({ english: '四级' }).stats.total, 3997);
-check('已过六级：不排除', run({ english: '六级' }).stats.total, 4001);
+check('未过四级：排除 5 个要求英语的职位',
+      run({ english: '无' }).stats.total, 4280);
+check('已过四级：仍够不着六级岗，可报 4,280 个',
+      run({ english: '四级' }).stats.total, 4280);
+check('已过六级：不排除', run({ english: '六级' }).stats.total, 4285);
 
 // 「其他要求」里的专项资格：填「没有」才排除，留空不判断
-check('没有会计/审计资格：排除 44 个', run({ accountingCert: 'none' }).stats.total, 3957);
-check('没有计算机资格：排除 4 个', run({ computerCert: 'none' }).stats.total, 3997);
-check('没有残疾人证：排除 15 个残疾人专项', run({ disabilityCert: 'none' }).stats.total, 3986);
+check('没有会计/审计资格：排除 44 个', run({ accountingCert: 'none' }).stats.total, 4241);
+check('没有计算机资格：排除 4 个', run({ computerCert: 'none' }).stats.total, 4281);
+check('没有残疾人证：排除 15 个残疾人专项', run({ disabilityCert: 'none' }).stats.total, 4270);
 check('排除原因各归各的',
       [run({ accountingCert: 'none' }).stats.excluded['没有会计/审计资格'],
        run({ computerCert: 'none' }).stats.excluded['没有计算机资格'],
        run({ disabilityCert: 'none' }).stats.excluded['不是残疾人专项对象']], [44, 4, 15]);
-check('三项都没有：3,938 个（三类互不重叠）',
-      run({ accountingCert: 'none', computerCert: 'none', disabilityCert: 'none' }).stats.total, 3938);
-check('有资格不排除', run({ accountingCert: 'has' }).stats.total, 4001);
-check('留空不判断', run({ accountingCert: '', computerCert: '', disabilityCert: '' }).stats.total, 4001);
+check('三项都没有：4,222 个（三类互不重叠）',
+      run({ accountingCert: 'none', computerCert: 'none', disabilityCert: 'none' }).stats.total, 4222);
+check('有资格不排除', run({ accountingCert: 'has' }).stats.total, 4285);
+check('留空不判断', run({ accountingCert: '', computerCert: '', disabilityCert: '' }).stats.total, 4561);
 check('只填专项资格也进入「符合硬性条件」', run({ accountingCert: 'has' }).mode, 'eligible');
 // 有会计资格、没有残疾人证：会计岗照收，残疾人专项仍被排掉
 check('分项判断互不牵连',
-      run({ accountingCert: 'has', disabilityCert: 'none' }).stats.total, 3986);
+      run({ accountingCert: 'has', disabilityCert: 'none' }).stats.total, 4270);
 
 check('只填学历时进入「符合硬性条件」模式', run({ level: '本科' }).mode, 'eligible');
 check('填专业后进入匹配模式',
@@ -186,20 +221,20 @@ check('匹配提示单独放在 matchFlags', Array.isArray(maleRec.matchFlags), 
 section('四、专业匹配');
 
 const lawB = run({ level: '本科', majorText: '法学', majorCodes: '030101K', classes: ['法学类'] });
-check('本科法学：1,346 个', lawB.stats.total, 1346);
+check('本科法学：1,372 个', lawB.stats.total, 1372);
 check('本科法学分档', [lawB.stats.byTier.exact.count, lawB.stats.byTier.class.count,
-                     lawB.stats.byTier.category.count], [272, 753, 321]);
+                     lawB.stats.byTier.category.count], [276, 772, 324]);
 
 const lawM = run({ level: '硕士', degree: '硕士', majorText: '法学', classes: ['法学类'] });
-check('硕士法学：1,911 个', lawM.stats.total, 1911);
+check('硕士法学：1,937 个', lawM.stats.total, 1937);
 check('硕士法学分档', [lawM.stats.byTier.exact.count, lawM.stats.byTier.class.count,
-                     lawM.stats.byTier.category.count], [979, 0, 932]);
+                     lawM.stats.byTier.category.count], [999, 0, 938]);
 
 const cs = run({ level: '本科', majorText: '计算机科学与技术', classes: ['计算机类'] });
-check('本科计算机：802 个', cs.stats.total, 802);
+check('本科计算机：829 个', cs.stats.total, 829);
 check('本科计算机分档', [cs.stats.byTier.exact.count, cs.stats.byTier.class.count,
-                       cs.stats.byTier.category.count], [30, 451, 321]);
-check('只勾计算机类：772 个', run({ level: '本科', classes: ['计算机类'] }).stats.total, 772);
+                       cs.stats.byTier.category.count], [34, 471, 324]);
+check('只勾计算机类：795 个', run({ level: '本科', classes: ['计算机类'] }).stats.total, 795);
 
 // 本科/研究生分列：研究生段独有的专业，本科不应命中
 const splitRec = records.find((r) => r['职位编码'] === '43210010');
@@ -280,7 +315,7 @@ const lawA = records.find((r) => r.tags.indexOf('legalA') >= 0);
 check('A 类法律职业资格被识别', !!lawA, true);
 if (lawA) {
   check('A 类标签不同时挂普通法律职业资格', lawA.tags.indexOf('legal'), -1);
-  check('A 类证书被算进标签选择器', run({ tags: ['legalA'] }).stats.total, 401);
+  check('A 类证书被算进标签选择器', run({ tags: ['legalA'] }).stats.total, 420);
 }
 check('只要求普通法律职业资格：88 个', run({ tags: ['legal'] }).stats.total, 88);
 
@@ -291,8 +326,8 @@ check('「参照管理单位」被识别', !!ref, true);
 
 const freshRec = records.find((r) => r.flags.freshOnly);
 check('考录对象「仅限应届」被结构化为 freshOnly', !!freshRec, true);
-check('freshOnly 共 1,578 行',
-      records.filter((r) => r.flags.freshOnly).length, 1578);
+check('freshOnly 共 1,682 行',
+      records.filter((r) => r.flags.freshOnly).length, 1682);
 const groundRec = records.find((r) => r.flags.ground2);
 check('「两年以上基层工作经历」被识别', !!groundRec, true);
 check('ground2 共 15 行', records.filter((r) => r.flags.ground2).length, 15);
@@ -349,14 +384,14 @@ check('补充的类目都在省考词表里',
  * ===================================================================*/
 section('八、检索');
 
-check('搜「天府新区」命中 10 个', run({}, { search: '天府新区' }).stats.total, 10);
+check('搜「天府新区」命中 24 个', run({}, { search: '天府新区' }).stats.total, 24);
 check('搜职位编码命中 1 个', run({}, { search: '36210007' }).stats.total, 1);
 check('搜「成都」按文字命中', run({}, { search: '成都' }).stats.total > 100, true);
 const miss = run({}, { search: '不存在的岗位xyz' });
 check('搜不到时结果为 0', [miss.mode, miss.stats.total], ['browse', 0]);
 const lawSearch = run({ level: '本科', majorText: '法学', classes: ['法学类'] }, { search: '成都' });
 check('填了专业后搜索只缩小结果集',
-      lawSearch.stats.total > 0 && lawSearch.stats.total < 1346, true);
+      lawSearch.stats.total > 0 && lawSearch.stats.total < 1372, true);
 
 /* =====================================================================
  * 九、导出
@@ -378,7 +413,7 @@ const perfProfile = P({ level: '本科', majorText: '法学', classes: ['法学�
 const t1 = Date.now();
 for (let i = 0; i < 10; i++) SC.filterRecords(records, perfProfile, {});
 const avg = (Date.now() - t1) / 10;
-console.log('  单次全量筛选平均 ' + avg.toFixed(1) + ' ms（4,001 行）');
+console.log('  单次全量筛选平均 ' + avg.toFixed(1) + ' ms（4,561 行）');
 check('单次筛选 < 200ms', avg < 200, true);
 
 /* =====================================================================
