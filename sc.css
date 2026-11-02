@@ -5,15 +5,24 @@
 /* 24 个值（21 个市州 + 3 个系统），比国考的 31 个省份少，列表可以矮一点 */
 #f-city-list { max-height: 196px; }
 
+/* dl 默认有 1em 的上下外边距，卡片是 flex 容器、外边距不折叠，
+   四列网格上下各多出 13.5px 的空白，两块网格之间更是空出 36px。
+   卡片自己的 9px gap 已经够分段，这里清零 */
+.card__grid { margin: 0; }
+
 /* 「考录范围」「考录对象」是整段原文，单独一块两列网格，
-   和上面的四列网格共用边框，不重复画线 */
-.card__grid--wide { grid-template-columns: max-content 1fr; padding-top: 6px; }
-.card__grid + .card__grid--wide { border-top: 0; }
+   和上面的四列网格共用边框，不重复画线。
+   负的 margin-top 抵消卡片的 9px gap，让两块紧贴着同一条横线 */
+.card__grid--wide { grid-template-columns: max-content 1fr; padding: 5px 0 9px; }
+.card__grid + .card__grid--wide { margin-top: -9px; border-top: 0; }
 .card__grid--wide dd { line-height: 1.55; }
 
 /* 省考的「拟任职务」比较长（一级主任科员以下及其他相当职级层次），
    和别的值同处 1fr 列，允许换行即可，不额外缩字号 */
 .card__grid dd { line-height: 1.5; }
+
+/* 报名比例：统计表没列的职位（定向招录、特警等）显示「未公布」 */
+.card__grid dd .muted { color: var(--ink-faint); }
 
 /* 专业栏原文里的换行是表里真有的分段（3,375 行），
    折成一行会粘成「社会类研究生：…」，看着像专业名的一部分 */

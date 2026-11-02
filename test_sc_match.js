@@ -44,10 +44,34 @@ const loadMs = Date.now() - t0;
 
 check('职位总数', records.length, 4561);
 check('招录总人数', records.reduce((a, r) => a + r.headcount, 0), 10158);
-check('列数', DATA.H.length, 29);
+check('列数', DATA.H.length, 30);
 check('市州数', DATA.regions.length, 24);
 check('系统类别数', DATA.systems.length, 9);
 console.log('  展开耗时 ' + loadMs + ' ms');
+
+// 报名比例来自另一份《报名人数统计表》，按职位编码并进来
+check('报名比例统计日期', DATA.meta.regDate, '11月1日17点');
+check('报名比例行数', DATA.meta.regRows, 4279);
+const withReg = records.filter((r) => r['报名比例']);
+check('有报名比例的职位', withReg.length, 4279);
+const regTally = Object.entries(withReg.reduce((m, r) => {
+  m[r['报名比例']] = (m[r['报名比例']] || 0) + 1;
+  return m;
+}, {})).sort((a, b) => b[1] - a[1]);
+check('比例区间分布', regTally, [
+  ['<5:1', 2236], ['≥5:1且<30:1', 1919], ['≥30:1且<50:1', 86],
+  ['≥50:1且<100:1', 30], ['≥100', 8],
+]);
+const byCode = new Map(records.map((r) => [r['职位编码'], r]));
+check('36101001 的报名比例', byCode.get('36101001')['报名比例'], '≥5:1且<30:1');
+check('定向招录没有报名比例', byCode.get('26401001')['报名比例'], '');
+check('特警没有报名比例', byCode.get('81200001')['报名比例'], '');
+const noRegBySystem = Object.entries(records.filter((r) => !r['报名比例'])
+  .reduce((m, r) => {
+    m[r['系统类别']] = (m[r['系统类别']] || 0) + 1;
+    return m;
+  }, {})).sort((a, b) => b[1] - a[1]);
+check('未列报名比例的 282 个职位', noRegBySystem, [['定向公务员', 276], ['人民警察', 6]]);
 
 /* =====================================================================
  * 二、浏览模式：不填个人条件
@@ -403,6 +427,7 @@ const csv = SC.toCSV(sample);
 check('CSV 带 BOM 头', csv.charCodeAt(0), 0xFEFF);
 check('CSV 表头列数', csv.split('\r\n')[0].trim().split(',').length, SC.CSV_COLUMNS.length);
 check('CSV 行数（含表头）', csv.trim().split('\r\n').length, 4);
+check('CSV 含报名比例列', SC.CSV_COLUMNS.includes('报名比例'), true);
 
 /* =====================================================================
  * 十、性能

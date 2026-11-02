@@ -2,7 +2,10 @@
 """
 把四川省考职位表 .xlsx 编译成网页可直接加载的数据文件 data/sc_positions.js
 
-用法:  python -I build_sc_data.py "2027四川省考岗位汇总表.xlsx" [原表.xlsx]
+用法:  python -I build_sc_data.py "2027四川省考岗位汇总表.xlsx" [原表.xlsx] [报名人数统计表.xls]
+
+不给报名人数统计表时，自动用目录里最新的一份（文件名含「报名人数统计」，
+日期按「截止X月X日X点」挑）。统计表每天更新，重新运行本脚本即可。
 
 输出:  data/sc_positions.js   ->  window.SC_DATA = {...}
 
@@ -49,7 +52,12 @@ COLUMNS = [
     "笔试开考比例", "面试开考比例", "成绩占比",
     "加试专业", "加试民族语言", "加试心理测试", "体能测评",
     "考察比例", "其他要求", "民族自治州驻地", "咨询电话", "备注", "审核单位",
+    # 来自另一份《报名人数统计表》，按职位编码并进来；每天一份，见 load_reg_stats
+    "报名比例",
 ]
+
+# 报名人数统计表的文件名形如「…(截止10月31日17点).xls」，日期直接从文件名读
+CUTOFF_RE = re.compile(r"截止\s*(\d{1,2})月(\d{1,2})日\s*(?:(\d{1,2})[点时])?")
 
 # 原表表头（去掉换行后） -> 输出列名
 SOURCE_ALIASES = {
@@ -248,9 +256,115 @@ def load_review_units(path):
     return out
 
 
+def cutoff_text(text):
+    """「…(截止10月31日17点).xls」-> 「10月31日17点」；没有日期返回空串。"""
+    m = CUTOFF_RE.search(text or "")
+    if not m:
+        return ""
+    out = "%d月%d日" % (int(m.group(1)), int(m.group(2)))
+    if m.group(3):
+        out += "%d点" % int(m.group(3))
+    return out
+
+
+def find_reg_file(base_dir):
+    """在项目目录里找最新的一份报名人数统计表。
+
+    每天下载的文件都带「截止X月X日X点」，按这个日期挑最新；文件名里没有日期时
+    退回修改时间。找不到返回 None，构建照常进行，只是没有报名比例。
+    """
+    best = None
+    for name in os.listdir(base_dir):
+        if not name.lower().endswith((".xls", ".xlsx")):
+            continue
+        if "报名人数统计" not in name:
+            continue
+        path = os.path.join(base_dir, name)
+        m = re.search(r"(\d{1,2})月(\d{1,2})日\s*(?:(\d{1,2})[点时])?", name)
+        key = ((int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
+               if m else (0, 0, 0))
+        key = key + (os.path.getmtime(path),)
+        if best is None or key > best[0]:
+            best = (key, path)
+    return best[1] if best else None
+
+
+def cell_text(value):
+    """单元格 -> 文本。xlrd 会把编码读成 36101001.0，去掉小数尾巴。"""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return clean(value)
+
+
+def reg_sheet_rows(path):
+    """读统计表的每个 sheet（行列表）。按文件头判断格式，不看扩展名。
+
+    官方文件其实是 xlsx、扩展名却写 .xls，所以 xlsx 分支把文件对象交给 openpyxl，
+    绕开扩展名校验；万一以后真换成老式 .xls（BIFF），再用 xlrd 读。
+    """
+    with open(path, "rb") as fh:
+        head = fh.read(2)
+    sheets = []
+    if head == b"PK":
+        # read_only 模式是边读边从 zip 里取行的，文件对象要一直开到遍历完
+        with open(path, "rb") as fh:
+            book = openpyxl.load_workbook(fh, read_only=True, data_only=True)
+            for ws in book.worksheets:
+                sheets.append(list(ws.iter_rows(values_only=True)))
+            book.close()
+    else:
+        import xlrd
+        book = xlrd.open_workbook(path)
+        for ws in book.sheets():
+            sheets.append([tuple(ws.row_values(r)) for r in range(ws.nrows)])
+    return sheets
+
+
+def load_reg_stats(path):
+    """读取《报名人数统计表》：职位编码 -> 缴费比例区间，以及截止日期。
+
+    表头在第 2 行（第 1 行是大标题），列为：所属地市、招录机关、职位编码、
+    职位名称、缴费状况(缴费人数与招录名额的比例区间)。值就是区间本身，
+    如「<5:1」「≥30:1且<50:1」，工具不改写、不折算成具体人数。
+    """
+    ratios = {}
+    title = ""
+    for sheet_rows in reg_sheet_rows(path):
+        header_at = None
+        header = None
+        for i, row in enumerate(sheet_rows):
+            vals = [header_key(v) for v in row]
+            if "职位编码" in vals:
+                header_at, header = i, vals
+                break
+        if header_at is None:
+            if not title and sheet_rows and sheet_rows[0]:
+                title = clean(sheet_rows[0][0])
+            continue
+        ri = None
+        for i, name in enumerate(header):
+            # 「缴费状况(缴费人数与招录名额的比例区间)」；别把「开考比例」认进来
+            if "缴费" in name or ("比例" in name and "开考" not in name):
+                ri = i
+                break
+        if ri is None:
+            continue
+        ci = header.index("职位编码")
+        for row in sheet_rows[header_at + 1:]:
+            if len(row) <= max(ci, ri):
+                continue
+            code = cell_text(row[ci])
+            value = cell_text(row[ri])
+            if code.isdigit() and value:
+                ratios[code] = value
+
+    cutoff = cutoff_text(os.path.basename(path)) or cutoff_text(title)
+    return ratios, cutoff
+
+
 def main():
     if len(sys.argv) < 2:
-        print("用法: python -I build_sc_data.py <汇总表.xlsx> [原表.xlsx]")
+        print("用法: python -I build_sc_data.py <汇总表.xlsx> [原表.xlsx] [报名人数统计表.xls]")
         return 1
     xlsx_path = sys.argv[1]
     if not os.path.exists(xlsx_path):
@@ -261,6 +375,24 @@ def main():
     review_units = load_review_units(legacy_path)
     if legacy_path:
         print("审核单位: 从原表补回 %d 行" % len(review_units))
+
+    # 第三个参数可选：报名人数统计表。不给就在目录里找最新的那份，
+    # 文件名里的「截止X月X日X点」既是挑选依据，也是页面顶部显示的统计日期
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    reg_arg = sys.argv[3] if len(sys.argv) > 3 else None
+    if reg_arg and not os.path.exists(reg_arg):
+        print("找不到报名人数统计表: %s" % reg_arg)
+        return 1
+    reg_path = reg_arg or find_reg_file(base_dir)
+    reg_ratios, reg_cutoff = {}, ""
+    if reg_path:
+        reg_ratios, reg_cutoff = load_reg_stats(reg_path)
+        print("报名比例: %s（截至%s）%d 行" % (
+            os.path.basename(reg_path), reg_cutoff or "日期未知", len(reg_ratios)))
+        if not reg_ratios:
+            print("!! 统计表里没读到报名比例，检查表头是否为「职位编码 / 缴费状况」")
+    else:
+        print("报名比例: 目录里没有《报名人数统计表》，跳过")
 
     book = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
 
@@ -327,6 +459,7 @@ def main():
                 values["民族自治州驻地"] = "是"
             if review_units.get(code):
                 values["审核单位"] = review_units[code]
+            values["报名比例"] = reg_ratios.get(code, "")
             rows.append([values[c] for c in COLUMNS])
             sheet_count += 1
 
@@ -336,6 +469,19 @@ def main():
     total = len(rows)
     print("读取职位数: %d（跳过 %d 行）" % (total, sum(dropped.values())))
     print("sheet: %d 个有数据" % len(sheets_used))
+
+    if reg_ratios:
+        code_at = COLUMNS.index("职位编码")
+        sys_at = COLUMNS.index("系统类别")
+        missing = [row[sys_at] for row in rows if not reg_ratios.get(row[code_at])]
+        print("报名比例覆盖 %d/%d 个职位，未列 %d 个%s" % (
+            total - len(missing), total, len(missing),
+            "（%s）" % " / ".join("%s %d" % (s, n) for s, n in Counter(missing).most_common())
+            if missing else ""))
+        known = {row[code_at] for row in rows}
+        extra = [code for code in reg_ratios if code not in known]
+        if extra:
+            print("!! 统计表里有 %d 个职位编码不在职位表中: %s" % (len(extra), "、".join(extra[:8])))
 
     # ---- 派生词表（全部来自这份表自身）------------------------------------
     col = {name: i for i, name in enumerate(COLUMNS)}
@@ -406,6 +552,10 @@ def main():
             "source": os.path.basename(xlsx_path),
             "total": total,
             "sheets": len(sheets_used),
+            # 报名人数统计表的截止日期与文件名；没放统计表时为空，页面不显示报名比例
+            "regDate": reg_cutoff,
+            "regFile": os.path.basename(reg_path) if reg_path else "",
+            "regRows": len(reg_ratios),
         },
         "H": COLUMNS,
         "D": encoded,

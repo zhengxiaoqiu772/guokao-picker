@@ -357,8 +357,13 @@
       return !skip[e[0]] && e[2] > 0;
     }), 'tags');
 
-    $('masthead-meta').innerHTML = '数据来源：' + esc(DATA.meta.source) +
+    let meta = '数据来源：' + esc(DATA.meta.source) +
       ' · 共 <b>' + DATA.meta.total.toLocaleString('en-US') + '</b> 个职位';
+    if (DATA.meta.regDate) {
+      meta += ' · 报名比例截至 <b>' + esc(DATA.meta.regDate) + '</b>' +
+        '<span title="' + esc(regHint()) + '">（缴费人数 : 招录名额）</span>';
+    }
+    $('masthead-meta').innerHTML = meta;
   }
 
   /* ===================================================================
@@ -819,12 +824,20 @@
     ['考试类别', '考试类别'], ['招录名额', '招录名额'],
     ['学历', '学历'], ['学位', '学位'],
     ['政治面貌', '政治面貌'], ['拟任职务', '拟任职务'],
+    ['报名比例', '报名比例'],
   ];
+
+  function regHint() {
+    const date = DATA.meta && DATA.meta.regDate;
+    return (date ? '截至' + date + '的' : '') + '缴费人数与招录名额之比';
+  }
 
   /**
    * 卡片信息格：只列表里真写了的字段。
    * 定向招录那张表只有 9 列，没有考试类别、学历、学位、政治面貌、拟任职务、考录范围，
    * 补个「—」会被读成「不限」，所以整格省略；页面顶部另有说明。
+   * 报名比例是唯一例外：统计表没列这个职位时明写「未公布」，
+   * 因为用户是专门来看这一格的，空着会被当成没加载出来。
    */
   function gridHTML(r) {
     let out = '';
@@ -833,10 +846,18 @@
         const pair = GRID_ROWS[i + k];
         if (!pair) break;
         const raw = r[pair[1]];
-        if (raw === '' || raw == null) continue;
+        const isReg = pair[1] === '报名比例';
+        const title = isReg ? ' title="' + esc(regHint()) + '"' : '';
+        if (raw === '' || raw == null) {
+          if (isReg && DATA.meta.regDate) {
+            out += '<dt' + title + '>' + esc(pair[0]) + '</dt>' +
+              '<dd><span class="muted" title="报名人数统计表里没有这个职位">未公布</span></dd>';
+          }
+          continue;
+        }
         const value = /^\d+$/.test(String(raw))
           ? '<span class="num">' + esc(raw) + '</span>' : esc(raw);
-        out += '<dt>' + esc(pair[0]) + '</dt><dd>' + value + '</dd>';
+        out += '<dt' + title + '>' + esc(pair[0]) + '</dt><dd>' + value + '</dd>';
       }
     }
     // 考录范围/考录对象是整段原文，单独成一行网格，免得挤在四列里
@@ -1035,7 +1056,8 @@
   const COMPARE_ROWS = [
     ['市州', '市州'], ['系统类别', '系统类别'], ['招录机关', '招录机关'],
     ['内设机构', '内设机构'], ['职位名称', '职位名称'], ['考试类别', '考试类别'],
-    ['拟任职务', '拟任职务'], ['招录名额', '招录名额'], ['考录范围', '考录范围'],
+    ['拟任职务', '拟任职务'], ['招录名额', '招录名额'], ['报名比例', '报名比例'],
+    ['考录范围', '考录范围'],
     ['考录对象', '考录对象'], ['学历', '学历'], ['学位', '学位'],
     ['政治面貌', '政治面貌'], ['其他要求', '其他要求'],
   ];
@@ -1091,6 +1113,8 @@
     html += '</tr>';
 
     COMPARE_ROWS.forEach(function (pair) {
+      // 构建时没放报名人数统计表就别留一行全是「—」
+      if (pair[1] === '报名比例' && !DATA.meta.regDate) return;
       const vals = picked.map(function (r) { return r[pair[1]] || '—'; });
       const allSame = vals.every(function (v) { return v === vals[0]; });
       html += '<tr><th class="rowhead">' + esc(pair[0]) + '</th>';
