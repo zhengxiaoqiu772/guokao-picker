@@ -50,7 +50,8 @@ check('系统类别数', DATA.systems.length, 9);
 console.log('  展开耗时 ' + loadMs + ' ms');
 
 // 报名比例来自另一份《报名人数统计表》，按职位编码并进来
-check('报名比例统计日期', DATA.meta.regDate, '11月1日17点');
+check('报名比例统计日期', DATA.meta.regDate, '11月2日17点');
+check('这份统计表是最后一次公布', DATA.meta.regFinal, true);
 check('报名比例行数', DATA.meta.regRows, 4279);
 const withReg = records.filter((r) => r['报名比例']);
 check('有报名比例的职位', withReg.length, 4279);
@@ -59,8 +60,8 @@ const regTally = Object.entries(withReg.reduce((m, r) => {
   return m;
 }, {})).sort((a, b) => b[1] - a[1]);
 check('比例区间分布', regTally, [
-  ['<5:1', 2236], ['≥5:1且<30:1', 1919], ['≥30:1且<50:1', 86],
-  ['≥50:1且<100:1', 30], ['≥100', 8],
+  ['≥5:1且<30:1', 2744], ['<5:1', 1148], ['≥30:1且<50:1', 255],
+  ['≥50:1且<100:1', 106], ['≥100', 26],
 ]);
 const byCode = new Map(records.map((r) => [r['职位编码'], r]));
 check('36101001 的报名比例', byCode.get('36101001')['报名比例'], '≥5:1且<30:1');
@@ -144,6 +145,33 @@ check('系统类别含监狱、戒毒、定向',
 
 check('浏览模式下的排除原因会记账',
       run({ cities: ['成都市'] }).stats.excluded['市州不符'], 4038);
+
+// 报名比例是分档的字符串，比大小看每档的下界；「<5:1」没有下界、未公布的排最后
+const regRank = (v) => !v ? 999 : (/≥/.test(v) ? Number(v.match(/≥\s*(\d+)/)[1]) : 0);
+const byReg = run({}, { sort: 'reg' }).all;
+check('按报名比例：标题行不变，仍是全部 4,561 个', byReg.length, 4561);
+check('按报名比例：最低档在最前', byReg[0]['报名比例'], '<5:1');
+check('按报名比例：同档按市州排', byReg[0]['市州'], '阿坝州');
+check('按报名比例：档位单调不降',
+      byReg.every((r, i) => i === 0 || regRank(byReg[i - 1]['报名比例']) <= regRank(r['报名比例'])),
+      true);
+check('按报名比例：未公布的 282 个垫底',
+      [byReg[byReg.length - 1]['报名比例'],
+       byReg.findIndex((r) => !r['报名比例'])], ['', 4279]);
+check('按报名比例：最高档 ≥100 出现 26 次',
+      byReg.filter((r) => r['报名比例'] === '≥100').length, 26);
+
+const byRegDesc = run({}, { sort: 'regDesc' }).all;
+check('报名比例高→低：最高档在最前', byRegDesc[0]['报名比例'], '≥100');
+check('报名比例高→低：有比例的 4,279 个档位单调不升',
+      byRegDesc.filter((r) => r['报名比例'])
+        .every((r, i, list) => i === 0 || regRank(list[i - 1]['报名比例']) >= regRank(r['报名比例'])),
+      true);
+check('报名比例高→低：未公布的照样垫底',
+      [byRegDesc[byRegDesc.length - 1]['报名比例'],
+       byRegDesc.findIndex((r) => !r['报名比例'])], ['', 4279]);
+check('报名比例高→低：前 26 个是 ≥100 那一档',
+      byRegDesc.slice(0, 26).every((r) => r['报名比例'] === '≥100'), true);
 
 /* =====================================================================
  * 三、个人条件：留空不排除

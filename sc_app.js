@@ -361,6 +361,7 @@
       ' · 共 <b>' + DATA.meta.total.toLocaleString('en-US') + '</b> 个职位';
     if (DATA.meta.regDate) {
       meta += ' · 报名比例截至 <b>' + esc(DATA.meta.regDate) + '</b>' +
+        (DATA.meta.regFinal ? '<b>（最后一次公布）</b>' : '') +
         '<span title="' + esc(regHint()) + '">（缴费人数 : 招录名额）</span>';
     }
     $('masthead-meta').innerHTML = meta;
@@ -829,7 +830,8 @@
 
   function regHint() {
     const date = DATA.meta && DATA.meta.regDate;
-    return (date ? '截至' + date + '的' : '') + '缴费人数与招录名额之比';
+    return (date ? '截至' + date + '的' : '') + '缴费人数与招录名额之比' +
+      (DATA.meta && DATA.meta.regFinal ? '，官方此次为最后一次公布' : '');
   }
 
   /**
@@ -1496,6 +1498,12 @@
     restore();
     buildSidebar();
     writeForm(state.profile);
+    // 构建时没放《报名人数统计表》就没有比例可排，两个比例排序都从下拉里撤掉
+    if (!DATA.meta.regDate) {
+      Array.from($('f-sort').querySelectorAll('option[value="reg"], option[value="regDesc"]'))
+        .forEach(function (opt) { opt.parentNode.removeChild(opt); });
+      if (state.sort === 'reg' || state.sort === 'regDesc') state.sort = 'region';
+    }
     $('f-sort').value = state.sort;
     bind();
     render();

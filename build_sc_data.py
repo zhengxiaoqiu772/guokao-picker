@@ -358,8 +358,12 @@ def load_reg_stats(path):
             if code.isdigit() and value:
                 ratios[code] = value
 
-    cutoff = cutoff_text(os.path.basename(path)) or cutoff_text(title)
-    return ratios, cutoff
+    name = os.path.basename(path)
+    cutoff = cutoff_text(name) or cutoff_text(title)
+    # 报名截止后官方会出最后一份，文件名/标题带「最后一次公布」：
+    # 页面上标出来，免得后面几天还在等新数据
+    final = "最后一次" in name or "最后一次" in title
+    return ratios, cutoff, final
 
 
 def main():
@@ -384,11 +388,12 @@ def main():
         print("找不到报名人数统计表: %s" % reg_arg)
         return 1
     reg_path = reg_arg or find_reg_file(base_dir)
-    reg_ratios, reg_cutoff = {}, ""
+    reg_ratios, reg_cutoff, reg_final = {}, "", False
     if reg_path:
-        reg_ratios, reg_cutoff = load_reg_stats(reg_path)
-        print("报名比例: %s（截至%s）%d 行" % (
-            os.path.basename(reg_path), reg_cutoff or "日期未知", len(reg_ratios)))
+        reg_ratios, reg_cutoff, reg_final = load_reg_stats(reg_path)
+        print("报名比例: %s（截至%s%s）%d 行" % (
+            os.path.basename(reg_path), reg_cutoff or "日期未知",
+            "，最后一次公布" if reg_final else "", len(reg_ratios)))
         if not reg_ratios:
             print("!! 统计表里没读到报名比例，检查表头是否为「职位编码 / 缴费状况」")
     else:
@@ -554,6 +559,7 @@ def main():
             "sheets": len(sheets_used),
             # 报名人数统计表的截止日期与文件名；没放统计表时为空，页面不显示报名比例
             "regDate": reg_cutoff,
+            "regFinal": reg_final,
             "regFile": os.path.basename(reg_path) if reg_path else "",
             "regRows": len(reg_ratios),
         },

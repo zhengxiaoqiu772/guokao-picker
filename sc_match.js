@@ -572,17 +572,37 @@
               p.accountingCert || p.computerCert || p.disabilityCert);
   }
 
+  const byRegion = (a, b) => a['市州'].localeCompare(b['市州'], 'zh') ||
+                             a['招录机关'].localeCompare(b['招录机关'], 'zh');
+
   const SORTERS = {
-    region: (a, b) => a['市州'].localeCompare(b['市州'], 'zh') ||
-                      a['招录机关'].localeCompare(b['招录机关'], 'zh'),
+    region: byRegion,
     dept: (a, b) => a['招录机关'].localeCompare(b['招录机关'], 'zh'),
     headcount: (a, b) => b.headcount - a.headcount,
     code: (a, b) => String(a['职位编码']).localeCompare(String(b['职位编码'])),
     tier: (a, b) => tierRank(a.tier) - tierRank(b.tier),
+    // 报名比例：同一档里按市州排，免得两千多个 <5:1 乱序。
+    // 两个方向都把「未公布」放最后——它不是一个比例，只是没数据
+    reg: (a, b) => regRank(a['报名比例']) - regRank(b['报名比例']) || byRegion(a, b),
+    regDesc: (a, b) => regRank(a['报名比例'], true) - regRank(b['报名比例'], true) ||
+                       byRegion(a, b),
   };
 
   function tierRank(tier) {
     return tier === 'exact' ? 0 : tier === 'class' ? 1 : 2;
+  }
+
+  /**
+   * 报名比例是官方分的档（<5:1、≥5:1且<30:1 …），取每档的下界比大小。
+   * 「<5:1」没有下界，算 0；reverse 时取负，最高档排最前。
+   * 统计表没列的（定向、特警）两个方向都垫底，
+   * 所以哨兵值要大于最高档（≥100）的下界。
+   */
+  function regRank(value, reverse) {
+    if (!value) return 999;
+    const m = /≥\s*(\d+)/.exec(value);
+    const rank = m ? Number(m[1]) : 0;
+    return reverse ? -rank : rank;
   }
 
   function filterRecords(records, rawProfile, opts) {
