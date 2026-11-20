@@ -125,7 +125,7 @@
     identities: [], servicePlace: '',
 
     // 浏览筛选：职位本身的要求
-    counties: [], jobCats: [], exams: [], ranges: [],
+    city: '', counties: [], jobCats: [], exams: [], ranges: [],
     eduReqs: [], degreeReqs: [], certReqs: [], services: [],
     areaTags: [], minHeadcount: 0,
   };
@@ -676,6 +676,7 @@
 
   function buildProfile(raw) {
     const p = Object.assign({}, DEFAULT_PROFILE, raw || {});
+    p.city = p.city || '';
     p.countySet = new Set(p.counties || []);
     p.jobCatSet = new Set(p.jobCats || []);
     p.examSet = new Set(p.exams || []);
@@ -768,6 +769,9 @@
 
     for (const rec of records) {
       if (scope && rec['市州'] !== scope) continue;
+      // 市州是县市区的上一级：先按市收窄，再在剩下的县里勾选。
+      // 它和 scope 一样只决定检索范围，不算「被筛掉」，不进 excluded 统计。
+      if (p.city && rec['市州'] !== p.city) continue;
 
       // ---- 浏览筛选：职位本身的要求 ----
       let why = null;

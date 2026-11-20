@@ -270,19 +270,22 @@
   function chooseCity(scope) {
     if (scope === null) return;
     state.scope = scope;
-    // 换范围后，原来勾的区县可能已经不在当前表里
+    // 换范围后，原来勾的区县、市州可能已经不在当前表里
     state.profile.counties = [];
+    state.profile.city = '';
     state.search = '';
     state.onlySaved = false;
     state.tierFilter = 'all';
     state.caps = resetCaps();
     if (pickers.counties) pickers.counties.set([]);
+    $('f-city').value = '';
     $('f-search').value = '';
     $('f-onlysaved').checked = false;
 
     closeCityPicker();
     refreshSidebarData();
     writeForm(state.profile);
+    applyCityFilter();
     renderScope();
     render();
   }
@@ -393,6 +396,11 @@
 
     function renderItems(items) {
       const picked = new Set(api.values());
+      if (!items.length) {
+        list.innerHTML = '<p class="leipicker__empty">没有可选项</p>';
+        syncChips();
+        return;
+      }
       list.innerHTML = items.map(function (it) {
         return '<label class="lei" data-name="' + esc(it.value) + '">' +
           '<input type="checkbox" value="' + esc(it.value) + '">' +
@@ -445,11 +453,35 @@
     return api;
   }
 
-  /** 县市区列表随当前范围变；专业类目词表由数据构建时汇总 */
+  /**
+   * 县市区列表跟着市州与当前范围变；专业类目词表由数据构建时汇总。
+   * 选了市州时直接用 DATA.counties 的 (市州, 县市区) 计数：全省列表把各市的
+   * 「市本级」合并成一条，而分市后必须拆开，否则计数会算成全省合计。
+   */
   function countyItems() {
+    const city = $('f-city') ? $('f-city').value : '';
+    if (city) {
+      return DATA.counties
+        .filter(function (e) { return e[2] === city; })
+        .map(function (e) { return { value: e[0], label: e[0], count: e[1] }; });
+    }
     return countsOf('县市区').map(function (e) {
       return { value: e[0], label: e[0], count: e[1] };
     });
+  }
+
+  /** 把市州选择同步到区县列表：标题、候选、已勾但不在本市的值 */
+  function applyCityFilter() {
+    // 单个市州范围里，市州筛选没有意义；存档里带来的旧值也在这里清掉
+    if (state.scope) $('f-city').value = '';
+    const city = $('f-city').value;
+    $('f-county-title').textContent = city === '省直属'
+      ? '省直属没有区县'
+      : (city ? city + ' · 区县' : '全部区县');
+    $('f-county-search').value = '';
+    $('f-county-search').placeholder = city ? '在' + city + '内搜索' : '搜索，如 三台';
+    if (pickers.counties) pickers.counties.setItems(countyItems());
+    $('row-city').hidden = !!state.scope;
   }
 
   function refreshSidebarData() {
@@ -518,6 +550,15 @@
   }
 
   function buildSidebar() {
+    $('f-city').innerHTML = '<option value="" selected>全部市州</option>' +
+      DATA.meta.cities.map(function (c) {
+        return '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>';
+      }).join('');
+    $('f-city').addEventListener('change', function () {
+      applyCityFilter();
+      onFormChange();
+    });
+
     buildPicker({
       key: 'counties', listId: 'f-county-list', searchId: 'f-county-search',
       chipsId: 'f-county-chips', items: countyItems(),
@@ -550,6 +591,7 @@
       classes: pickers.classes ? pickers.classes.values() : [],
       identities: chosen($('f-identities')),
       servicePlace: $('f-serviceplace').value,
+      city: $('f-city').value,
       counties: pickers.counties ? pickers.counties.values() : [],
       jobCats: chosen($('f-jobcats')),
       exams: chosen($('f-exams')),
@@ -569,6 +611,7 @@
     $('f-major').value = p.majorText || '';
     $('f-codes').value = p.majorCodes || '';
     $('f-serviceplace').value = p.servicePlace || '';
+    $('f-city').value = p.city || '';
     $('f-headcount').value = String(p.minHeadcount || 0);
 
     setChecked($('f-identities'), p.identities);
@@ -924,6 +967,12 @@
    * 岗位卡
    * ===================================================================*/
 
+  /** 卡片上只写「中江县」看不出是哪个市的，统一补上「德阳市 · 」 */
+  function countyLabel(r) {
+    if (!r['县市区']) return '';
+    return (r['市州'] ? r['市州'] + ' · ' : '') + r['县市区'];
+  }
+
   const GRID_ROWS = [
     ['县市区', '县市区'], ['岗位类别', '岗位类别'],
     ['考试科目', '考试科目'], ['招聘名额', '招聘名额'],
@@ -932,6 +981,7 @@
   ];
 
   function gridValue(field, r) {
+    if (field === '县市区') return countyLabel(r);
     if (field === '服务期年数') return r[field] ? r[field] + ' 年' : '';
     if (field === '教资要求') return r[field] || '';
     return r[field];
@@ -1014,7 +1064,7 @@
         '<div class="card__ident">' +
           '<h3 class="card__dept">' + esc(r['招聘单位']) + '</h3>' +
           '<p class="card__post">' + esc(r['岗位名称']) +
-            (r['县市区'] ? ' · ' + esc(r['县市区']) : '') + '</p>' +
+            (r['县市区'] ? ' · ' + esc(countyLabel(r)) : '') + '</p>' +
           '<p class="card__code">' +
             '<span class="card__code-item"><span class="card__code-label">岗位编码</span>' +
               '<span class="card__code-value">' + esc(r['岗位编码']) + '</span>' +
@@ -1460,6 +1510,7 @@
       $('f-onlysaved').checked = false;
       $('f-sort').value = 'region';
       writeForm(state.profile);
+      applyCityFilter();
       render();
     });
 
@@ -1577,6 +1628,7 @@
     buildSidebar();
     bind();
     writeForm(state.profile);
+    applyCityFilter();
     $('f-sort').value = state.sort;
     renderScope();
 

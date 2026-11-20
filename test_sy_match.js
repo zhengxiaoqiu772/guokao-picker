@@ -149,6 +149,21 @@ section('三、浏览筛选');
 const santa = count((r) => r['县市区'] === '三台县');
 check('县市区 = 三台县', run({ counties: ['三台县'] }).stats.total, santa);
 check('三台县不为零', santa > 0, true);
+
+// 市州是县市区的上一级：先选市，候选区县就只剩这个市的
+const chengduCounty = DATA.counties.find((e) => e[2] === '成都市' && e[0] !== '市本级')[0];
+check('市州 = 成都市', run({ city: '成都市' }).stats.total,
+  count((r) => r['市州'] === '成都市'));
+check('市州 = 省直属', run({ city: '省直属' }).stats.total,
+  count((r) => r['市州'] === '省直属'));
+check('市州 + 县市区', run({ city: '成都市', counties: [chengduCounty] }).stats.total,
+  count((r) => r['市州'] === '成都市' && r['县市区'] === chengduCounty));
+check('市州 + 县市区不为零',
+  run({ city: '成都市', counties: [chengduCounty] }).stats.total > 0, true);
+check('市州与当前范围一致', run({ city: '成都市' }, { scope: '成都市' }).stats.total,
+  count((r) => r['市州'] === '成都市'));
+check('市州与当前范围冲突', run({ city: '广元市' }, { scope: '成都市' }).stats.total, 0);
+check('市州不算「被筛掉」', run({ city: '资阳市' }).stats.excluded['市州不符'] || 0, 0);
 check('考试科目 = 教育类', run({ exams: ['教育类'] }).stats.total, 2197);
 check('考试科目 = 卫生类', run({ exams: ['卫生类'] }).stats.total, 2279);
 check('岗位类别 = 管理', run({ jobCats: ['管理'] }).stats.total, 1068);

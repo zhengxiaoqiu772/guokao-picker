@@ -54,18 +54,28 @@
     <details class="group" open>
       <summary class="group__head">浏览筛选 · 岗位要求</summary>
 
+      <div class="row" id="row-city">
+        <label class="row__label" for="f-city">市州</label>
+        <div class="row__control">
+          <select id="f-city">
+            <option value="" selected>全部市州</option>
+          </select>
+          <p class="hint">先选市州，下面的区县就只剩这个市的；只选市州就是全市岗位</p>
+        </div>
+      </div>
+
       <div class="row">
         <span class="row__label">县市区</span>
         <div class="row__control">
           <div class="chips" id="f-county-chips"></div>
           <div class="leipicker">
             <div class="leipicker__head">
-              <span class="leipicker__title">全部区县</span>
+              <span class="leipicker__title" id="f-county-title">全部区县</span>
               <input type="search" class="leipicker__search" id="f-county-search" placeholder="搜索，如 三台" autocomplete="off">
             </div>
             <div class="leipicker__list" id="f-county-list"></div>
           </div>
-          <p class="hint">省级、市级单位的岗位记在「市本级」</p>
+          <p class="hint">市级单位的岗位记「市本级」；省直属岗位不填县市区，选市州「省直属」即可</p>
         </div>
       </div>
 
