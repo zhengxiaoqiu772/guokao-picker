@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>事业单位选岗器 · 2026 年下半年四川全省</title>
+<meta name="description" content="浏览、筛选 2026 年下半年四川省 21 个市州和省直属事业单位的 7,821 个岗位；填上学历、教师资格证、身份、专业后逐条判断能不能报。全程离线运行。">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="sy.css">
+</head>
+<body>
+
+<!-- 载入遮罩：先在 HTML 里，数据脚本后注入，保证用户先看到它而不是白屏 -->
+<div class="loading" id="loading" role="status" aria-live="polite">
+  <p class="loading__title">正在调取事业单位岗位表</p>
+  <div class="loading__bar"></div>
+  <p class="loading__hint" id="loading-hint">解压全省 7,821 个岗位 …</p>
+</div>
+
+<header class="masthead">
+  <div class="masthead__inner">
+    <nav class="examswitch" aria-label="考试类型">
+      <a class="examswitch__item" href="index.html">国考 · 全国</a>
+      <a class="examswitch__item" href="sc.html">四川省考</a>
+      <a class="examswitch__item examswitch__item--on" href="sy.html" aria-current="page">事业编 · 四川全省</a>
+    </nav>
+    <p class="masthead__eyebrow" id="masthead-eyebrow">2026 年下半年四川省事业单位公开招聘</p>
+    <h1 class="masthead__title" id="masthead-title">四川事业单位 · 岗位检索</h1>
+    <div class="masthead__rule"></div>
+    <p class="masthead__meta" id="masthead-meta">数据来源：2026 年下半年四川事业单位岗位汇总表</p>
+    <div class="masthead__actions">
+      <button class="btn" id="btn-print" type="button">打印 / 存 PDF</button>
+      <button class="btn" id="btn-csv" type="button">导出 CSV</button>
+      <button class="btn" id="btn-reset" type="button">清空条件</button>
+    </div>
+  </div>
+</header>
+
+<div class="scopebar" id="scopebar">
+  <span class="scopebar__label">当前范围</span>
+  <strong class="scopebar__name" id="scope-name">—</strong>
+  <span class="scopebar__detail" id="scope-detail"></span>
+  <button type="button" class="btn" id="btn-city">切换范围</button>
+</div>
+
+<div class="shell">
+
+  <!-- ================= 左侧：浏览筛选 + 我的条件 ================= -->
+  <aside class="rail" aria-label="筛选条件">
+    <h2 class="declaration__title">筛选条件</h2>
+    <p class="declaration__sub">不填「我的条件」，就是在浏览岗位</p>
+
+    <!-- 浏览筛选：都是岗位本身的要求 -->
+    <details class="group" open>
+      <summary class="group__head">浏览筛选 · 岗位要求</summary>
+
+      <div class="row">
+        <span class="row__label">县市区</span>
+        <div class="row__control">
+          <div class="chips" id="f-county-chips"></div>
+          <div class="leipicker">
+            <div class="leipicker__head">
+              <span class="leipicker__title">全部区县</span>
+              <input type="search" class="leipicker__search" id="f-county-search" placeholder="搜索，如 三台" autocomplete="off">
+            </div>
+            <div class="leipicker__list" id="f-county-list"></div>
+          </div>
+          <p class="hint">省级、市级单位的岗位记在「市本级」</p>
+        </div>
+      </div>
+
+      <div class="row">
+        <span class="row__label">岗位类别</span>
+        <div class="row__control"><div class="checks" id="f-jobcats"></div></div>
+      </div>
+      <div class="row">
+        <span class="row__label">考试科目</span>
+        <div class="row__control"><div class="checks" id="f-exams"></div></div>
+      </div>
+      <div class="row">
+        <span class="row__label">招聘对象</span>
+        <div class="row__control">
+          <div class="checks" id="f-ranges"></div>
+          <p class="hint">只留「招聘范围」写了这类人的岗位；这里不判断你是不是，判断在下方「我的身份」</p>
+        </div>
+      </div>
+      <div class="row">
+        <span class="row__label">学历要求</span>
+        <div class="row__control"><div class="checks" id="f-edureqs"></div></div>
+      </div>
+      <div class="row">
+        <span class="row__label">学位要求</span>
+        <div class="row__control"><div class="checks" id="f-degreereqs"></div></div>
+      </div>
+      <div class="row">
+        <span class="row__label">教师资格证</span>
+        <div class="row__control"><div class="checks" id="f-certreqs"></div></div>
+      </div>
+      <div class="row">
+        <span class="row__label">最低服务期</span>
+        <div class="row__control"><div class="checks" id="f-services"></div></div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-headcount">招聘名额</label>
+        <div class="row__control">
+          <select id="f-headcount">
+            <option value="0" selected>不限</option>
+            <option value="2">2 人及以上</option>
+            <option value="3">3 人及以上</option>
+            <option value="5">5 人及以上</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <span class="row__label">基层服务地</span>
+        <div class="row__control">
+          <div class="checks" id="f-areatags"></div>
+          <p class="hint">「三支一扶」「西部计划」岗位对服务地的要求：全省 / 本市 / 本县</p>
+        </div>
+      </div>
+    </details>
+
+    <!-- 我的条件：全部留空 = 不按资格排除 -->
+    <details class="group" open>
+      <summary class="group__head">我的条件（可选）</summary>
+      <div class="row">
+        <label class="row__label" for="f-level">学历</label>
+        <div class="row__control">
+          <select id="f-level">
+            <option value="" selected>不填</option>
+            <option value="大专">大专</option>
+            <option value="本科">本科</option>
+            <option value="硕士">硕士研究生</option>
+            <option value="博士">博士研究生</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-degree">学位</label>
+        <div class="row__control">
+          <select id="f-degree">
+            <option value="" selected>不填</option>
+            <option value="无">无学位</option>
+            <option value="学士">学士</option>
+            <option value="硕士">硕士</option>
+            <option value="博士">博士</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-cert">教师资格证</label>
+        <div class="row__control">
+          <select id="f-cert">
+            <option value="" selected>不填</option>
+            <option value="无">没有教师资格证</option>
+            <option value="小学">小学</option>
+            <option value="初中">初中</option>
+            <option value="高中">高中</option>
+          </select>
+          <p class="hint">高学段可以报低学段岗位。学科是否一致，工具不判断</p>
+        </div>
+      </div>
+      <div class="row">
+        <span class="row__label">我的身份</span>
+        <div class="row__control">
+          <div class="checks" id="f-identities"></div>
+          <p class="hint">勾了才按「招聘范围」判断。退役大学生士兵请另勾；只勾这一项也能报普通退役军人岗</p>
+        </div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-serviceplace">基层服务地</label>
+        <div class="row__control">
+          <select id="f-serviceplace">
+            <option value="" selected>不填</option>
+          </select>
+          <p class="hint">只在勾了「三支一扶」或「西部计划」后生效；不填时跨县、跨市岗位只提示不排除</p>
+        </div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-major">专业名称</label>
+        <div class="row__control">
+          <input type="text" id="f-major" placeholder="如 汉语言文学、临床医学" autocomplete="off">
+        </div>
+      </div>
+      <div class="row">
+        <label class="row__label" for="f-codes">专业代码</label>
+        <div class="row__control">
+          <input type="text" id="f-codes" placeholder="如 050101，可留空" autocomplete="off">
+          <p class="hint" id="f-major-sugg"></p>
+        </div>
+      </div>
+      <div class="row">
+        <span class="row__label">专业类目</span>
+        <div class="row__control">
+          <div class="chips" id="f-lei-chips"></div>
+          <div class="leipicker">
+            <div class="leipicker__head">
+              <span class="leipicker__title">全部类目</span>
+              <input type="search" class="leipicker__search" id="f-lei-search" placeholder="搜索，如 医药卫生" autocomplete="off">
+            </div>
+            <div class="leipicker__list" id="f-lei-list"></div>
+          </div>
+          <p class="hint">专业栏大多写具体专业名或不限专业；勾选类目通常能多出一批岗位，留空则只按名称与代码匹配</p>
+        </div>
+      </div>
+    </details>
+
+    <p class="hint" style="margin-top:18px">
+      条件自动保存在本机浏览器，下次打开仍在。匹配结果仅供参考，以招聘机关的最终解释为准。
+    </p>
+  </aside>
+
+  <!-- ================= 右侧：结果 ================= -->
+  <main class="results" id="results">
+
+    <section class="tally" aria-label="筛选结果概览">
+      <div class="tally__item">
+        <span class="tally__label" id="tally-label-count">岗位</span>
+        <span class="tally__value tally__value--accent" id="tally-count">—</span>
+      </div>
+      <div class="tally__item">
+        <span class="tally__label">招聘人数</span>
+        <span class="tally__value" id="tally-people">—</span>
+      </div>
+      <div class="tally__item" id="tally-exact-item" hidden>
+        <span class="tally__label">专业精准命中</span>
+        <span class="tally__value" id="tally-exact">—</span>
+      </div>
+      <p class="tally__aside" id="tally-aside"></p>
+    </section>
+
+    <div class="notices" id="notices"></div>
+
+    <div class="toolbar">
+      <input type="search" class="toolbar__search" id="f-search"
+             placeholder="搜单位、岗位、编码、专业、地点" autocomplete="off">
+      <label class="toolbar__label" for="f-sort">排序</label>
+      <select id="f-sort" style="width:auto;min-width:110px">
+        <option value="region" selected>按县市区</option>
+        <option value="dept">按招聘单位</option>
+        <option value="headcount">按招聘名额</option>
+        <option value="code">按岗位编码</option>
+        <option value="tier">按匹配档位</option>
+      </select>
+      <span class="toolbar__spacer"></span>
+      <button type="button" class="btn btn--fav" id="btn-fav" title="打开收藏页（Esc 返回）">
+        <span class="fav-star">★</span> 收藏 <span class="fav-count" id="fav-count">0</span>
+      </button>
+      <label class="toolbar__label"><input type="checkbox" id="f-onlysaved"> 只看收藏</label>
+    </div>
+
+    <nav class="tiers" id="tiers" aria-label="匹配档位筛选"></nav>
+
+    <div id="groups"></div>
+
+    <section class="dist" id="dist" hidden>
+      <div class="dist__head">
+        <span class="dist__title">结果分布</span>
+        <div class="dist__tabs" id="dist-tabs"></div>
+      </div>
+      <div class="dist__body" id="dist-body"></div>
+    </section>
+  </main>
+</div>
+
+<!-- ================= 选择范围 ================= -->
+<section class="citypick" id="citypick" hidden aria-label="选择报考范围" role="dialog" aria-modal="true">
+  <div class="citypick__inner">
+    <p class="citypick__eyebrow">2026 年下半年四川省事业单位公开招聘</p>
+    <h2 class="citypick__title">先选报考范围</h2>
+    <div class="citypick__rule"></div>
+    <p class="citypick__sub">
+      全省汇总表含省直属和 21 个市州，共 7,821 个岗位。可以看全省，也可以只看某个市州；
+      进页后随时能在页头「切换范围」。
+    </p>
+    <div class="citypick__grid" id="citypick-grid"></div>
+    <p class="citypick__foot" id="citypick-foot">
+      全省大多数岗位写「面向全国招聘」，只有一百多个限定了招聘对象、户籍或基层项目。
+      选择范围不会过滤掉这些岗位，只是先确定看哪部分。
+    </p>
+  </div>
+</section>
+
+<!-- ================= 收藏页 ================= -->
+<section class="favpage" id="favpage" hidden aria-label="收藏的岗位">
+  <div class="favpage__bar">
+    <button type="button" class="btn" id="fav-back">← 返回选岗</button>
+    <h2 class="favpage__title"><span class="favpage__star">★</span>收藏的岗位
+      <span class="favpage__count" id="favpage-count">0</span> 个</h2>
+    <span class="favpage__hint">点卡片上的「★ 已收藏」即可移出</span>
+  </div>
+  <div class="favpage__body" id="favpage-body"></div>
+</section>
+
+<!-- ================= 收藏抽屉 ================= -->
+<div class="drawer" id="drawer">
+  <div class="drawer__bar" id="drawer-bar" role="button" tabindex="0" aria-expanded="false">
+    <span class="drawer__star">★</span>
+    <span>已收藏 <span class="drawer__count" id="drawer-count">0</span> 个岗位</span>
+    <span class="drawer__toggle" id="drawer-toggle">展开对比</span>
+  </div>
+  <div class="drawer__body" id="drawer-body"></div>
+</div>
+
+<p class="sr-only" id="live" aria-live="polite"></p>
+
+<script src="match.js"></script>
+<script src="sy_match.js"></script>
+<script src="sy_app.js"></script>
+</body>
+</html>

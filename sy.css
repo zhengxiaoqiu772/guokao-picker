@@ -1,0 +1,332 @@
+/* ==========================================================================
+   事业单位页面（四川全省）—— 只补 styles.css 没覆盖的部分
+   ========================================================================== */
+
+/* 全省 179 个县（市、区），比省考的 21 个市州多，列表留高一点，配搜索用 */
+#f-county-list { max-height: 260px; }
+
+/* dl 默认有 1em 的上下外边距，卡片是 flex 容器、外边距不折叠，
+   四列网格上下各多出 13.5px 的空白。卡片自己的 gap 已经够分段 */
+.card__grid { margin: 0; }
+
+/* 「招聘范围」「学历学位」是整段原文，单独一块两列网格 */
+.card__grid--wide { grid-template-columns: max-content 1fr; padding: 5px 0 9px; }
+.card__grid + .card__grid--wide { margin-top: -9px; border-top: 0; }
+.card__grid--wide dd { line-height: 1.55; }
+.card__grid dd { line-height: 1.5; }
+
+/* 专业栏原文里的换行是表里真有的分段，折成一行会粘成一个假专业名 */
+.card__major-text { white-space: pre-wrap; }
+
+/* 对比抽屉里的专业栏原文同理 */
+.compare td { white-space: pre-line; }
+
+/* 「限本县 / 限本市 / 限全省基层服务」是提示，不是硬资格 */
+.tag--info {
+  border-color: rgba(30, 58, 92, .45);
+  color: var(--indigo);
+  background: rgba(30, 58, 92, .05);
+}
+
+/* --------------------------------------------------------------------------
+   当前范围条
+   -------------------------------------------------------------------------- */
+
+.scopebar {
+  max-width: 1560px;
+  margin: 0 auto;
+  padding: 10px 32px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--rule);
+}
+.scopebar__label {
+  font-size: 12px;
+  letter-spacing: .16em;
+  color: var(--ink-faint);
+}
+.scopebar__name {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  color: var(--ink);
+}
+.scopebar__detail {
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+.scopebar .btn { margin-left: auto; }
+
+/* --------------------------------------------------------------------------
+   选择范围：整页对话框
+   -------------------------------------------------------------------------- */
+
+.citypick {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: start center;
+  padding: 28px 20px;
+  overflow-y: auto;
+  background: rgba(28, 27, 25, .46);
+}
+.citypick[hidden] { display: none; }
+body.citypick-open { overflow: hidden; }
+
+.citypick__inner {
+  position: relative;
+  width: min(1040px, 100%);
+  margin: 0 auto;
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  box-shadow: 0 26px 80px rgba(20, 19, 17, .3);
+  padding: 34px 38px 30px;
+}
+.citypick__inner::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; right: 0;
+  height: 4px;
+  background: var(--cinnabar);
+}
+
+.citypick__eyebrow {
+  margin: 0;
+  font-size: 11.5px;
+  letter-spacing: .22em;
+  color: var(--ink-faint);
+}
+.citypick__title {
+  margin: 7px 0 0;
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: var(--ink);
+}
+.citypick__rule {
+  width: 52px;
+  height: 3px;
+  margin: 16px 0 14px;
+  background: var(--cinnabar);
+}
+.citypick__sub {
+  margin: 0 0 22px;
+  max-width: 62em;
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--ink-soft);
+}
+.citypick__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.citypick__foot {
+  margin: 22px 0 0;
+  padding-top: 14px;
+  border-top: 1px dashed var(--rule);
+  font-size: 12.5px;
+  line-height: 1.8;
+  color: var(--ink-faint);
+}
+.citypick__foot b { color: var(--cinnabar); font-weight: 700; }
+
+.citycard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 17px 19px 15px;
+  text-align: left;
+  font-family: inherit;
+  color: var(--ink);
+  background: rgba(255, 255, 255, .48);
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  cursor: pointer;
+  transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+.citycard:hover {
+  border-color: var(--cinnabar);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(28, 27, 25, .1);
+}
+.citycard:focus-visible {
+  outline: 2px solid var(--cinnabar);
+  outline-offset: 3px;
+}
+.citycard__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.citycard__name {
+  font-family: var(--serif);
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.citycard__go {
+  margin-left: auto;
+  font-size: 12px;
+  letter-spacing: .08em;
+  color: var(--cinnabar);
+  white-space: nowrap;
+}
+.citycard__title {
+  margin-top: 5px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+  min-height: 2.6em;
+}
+.citycard__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--rule);
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.citycard__stat b {
+  font-family: var(--numerals);
+  font-size: 16px;
+  color: var(--cinnabar);
+  margin-right: 2px;
+}
+
+/* 四川全省：深色一张，和单市州分开，表明它是汇总而不是第 23 份表 */
+.citycard--all {
+  grid-column: 1 / -1;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.citycard--all:hover {
+  background: #2B2A27;
+  border-color: #2B2A27;
+}
+.citycard--all .citycard__go { color: #E7B3AE; }
+.citycard--all .citycard__title { color: rgba(247, 247, 244, .62); }
+.citycard--all .citycard__stats {
+  border-top-color: rgba(247, 247, 244, .2);
+  color: rgba(247, 247, 244, .8);
+}
+.citycard--all .citycard__stat b { color: #F0C9C5; }
+
+/* --------------------------------------------------------------------------
+   收藏页：工具条「★ 收藏」整页打开
+   -------------------------------------------------------------------------- */
+
+.btn--fav {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--cinnabar);
+  border-color: var(--cinnabar);
+}
+.btn--fav:hover { background: var(--cinnabar); color: #fff; }
+.btn--fav .fav-star { font-size: 14px; }
+.fav-count { font-family: var(--numerals); font-weight: 700; }
+
+.favpage {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--paper);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.favpage[hidden] { display: none; }
+/* 整页盖住时，背后别再滚动，抽屉也先收起来 */
+body.fav-open { overflow: hidden; }
+body.fav-open .drawer { display: none; }
+
+.favpage__bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 32px;
+  background: var(--paper);
+  border-bottom: 2px solid var(--cinnabar);
+}
+.favpage__title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 700;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.favpage__star { color: var(--cinnabar); }
+.favpage__count { font-family: var(--numerals); color: var(--cinnabar); }
+.favpage__hint { margin-left: auto; font-size: 12.5px; color: var(--ink-faint); }
+.favpage__body {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px 32px 80px;
+}
+
+/* 收藏之后条件改了、不再符合的岗位：灰色印章，不跟「可报」混在一起 */
+.seal--miss { border-color: var(--ink-faint); color: var(--ink-faint); }
+
+@media (max-width: 760px) {
+  .citypick { padding: 16px 12px; align-items: start; }
+  .citypick__inner { padding: 26px 20px 22px; }
+  .citypick__title { font-size: 24px; }
+  .citypick__grid { grid-template-columns: 1fr; }
+  .citypick__foot { margin-top: 16px; }
+}
+
+@media (max-width: 640px) {
+  .scopebar { padding: 9px 20px; }
+  .scopebar .btn { margin-left: 0; }
+  .favpage__bar { padding: 10px 16px; }
+  .favpage__body { padding: 14px 16px 60px; }
+  .favpage__hint { display: none; }
+  /* 窄屏上组标题被计数和说明挤成一字一行，说明另起一行 */
+  .favpage__body .group-head { flex-wrap: wrap; row-gap: 3px; }
+  .favpage__body .group-head__title { white-space: nowrap; }
+  .favpage__body .group-head__desc {
+    flex-basis: 100%;
+    margin-left: 0;
+    text-align: left;
+  }
+}
+
+/* 考录信息：标签列定宽、值列自适应。
+   外层 .card__remark 是 pre-wrap，得在这里还原，否则标签间的换行会留下空行 */
+.card__remark .card__meta {
+  white-space: normal;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 14px;
+  margin: 0;
+}
+.card__remark .card__meta dt { color: var(--ink-faint); }
+.card__remark .card__meta dd { margin: 0; }
+
+@media print {
+  /* 选择范围的遮罩别跟打印内容一起出去 */
+  .citypick { display: none !important; }
+  .scopebar { border-bottom: none; padding-top: 0; }
+
+  /* 在收藏页按 Ctrl+P 就打印收藏的岗位，别把背后整页选岗结果也带上 */
+  body.fav-open .shell { display: none; }
+  body.fav-open .favpage { position: static; overflow: visible; }
+  body.fav-open .favpage__bar { border-bottom: none; padding: 0 0 10px; }
+  body.fav-open .favpage__bar .btn,
+  body.fav-open .favpage__hint { display: none; }
+}
