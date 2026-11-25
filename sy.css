@@ -15,6 +15,9 @@
 .card__grid--wide dd { line-height: 1.55; }
 .card__grid dd { line-height: 1.5; }
 
+/* 缴费人数「未统计」：统计表只含综合/卫生类，教育类岗位没有这一项 */
+.card__grid dd .muted { color: var(--ink-faint); }
+
 /* 专业栏原文里的换行是表里真有的分段，折成一行会粘成一个假专业名 */
 .card__major-text { white-space: pre-wrap; }
 

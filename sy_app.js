@@ -318,10 +318,14 @@
       : '四川事业单位 · 岗位检索';
 
     const totalPeople = records.reduce(function (a, r) { return a + r.headcount; }, 0);
+    const regMeta = DATA.meta.regDate
+      ? ' · 缴费人数截至 <b>' + esc(DATA.meta.regDate) + '</b>' +
+        '<span title="《报名情况统计》只含综合类、卫生类岗位，教育类岗位单独公布">（不含教育类）</span>'
+      : '';
     $('masthead-meta').innerHTML = '数据来源：' +
       DATA.meta.sources.map(esc).join(' · ') + ' · 共 <b>' +
       records.length.toLocaleString('en-US') + '</b> 个岗位 / <b>' +
-      totalPeople.toLocaleString('en-US') + '</b> 人';
+      totalPeople.toLocaleString('en-US') + '</b> 人' + regMeta;
   }
 
   /* ===================================================================
@@ -976,6 +980,7 @@
   const GRID_ROWS = [
     ['县市区', '县市区'], ['岗位类别', '岗位类别'],
     ['考试科目', '考试科目'], ['招聘名额', '招聘名额'],
+    ['缴费人数', '缴费人数'],
     ['学历要求', '学历要求'], ['学位要求', '学位要求'],
     ['教师资格证', '教资要求'], ['最低服务期', '服务期年数'],
   ];
@@ -994,7 +999,14 @@
         const pair = GRID_ROWS[i + k];
         if (!pair) break;
         const raw = gridValue(pair[1], r);
-        if (raw === '' || raw == null) continue;
+        if (raw === '' || raw == null) {
+          // 统计表里没有的岗位（教育类）不跳过，明写「未统计」——留白会被当成 0
+          if (pair[1] === '缴费人数' && DATA.meta.regDate) {
+            out += '<dt>缴费人数</dt><dd><span class="muted" ' +
+              'title="《报名情况统计》里没有这个岗位（教育类岗位单独公布）">未统计</span></dd>';
+          }
+          continue;
+        }
         const value = /^\d+$/.test(String(raw))
           ? '<span class="num">' + esc(raw) + '</span>' : esc(raw);
         out += '<dt>' + esc(pair[0]) + '</dt><dd>' + value + '</dd>';
@@ -1184,7 +1196,8 @@
   const COMPARE_ROWS = [
     ['市州', '市州'], ['县市区', '县市区'], ['招聘单位', '招聘单位'],
     ['岗位名称', '岗位名称'], ['岗位类别', '岗位类别'], ['考试科目', '考试科目'],
-    ['招聘名额', '招聘名额'], ['学历学位', '学历学位'], ['教资要求', '教资要求'],
+    ['招聘名额', '招聘名额'], ['缴费人数', '缴费人数'],
+    ['学历学位', '学历学位'], ['教资要求', '教资要求'],
     ['招聘范围', '招聘范围'], ['最低服务期', '最低服务期'], ['咨询电话', '咨询电话'],
   ];
 
@@ -1239,6 +1252,8 @@
     html += '</tr>';
 
     COMPARE_ROWS.forEach(function (pair) {
+      // 构建时没放《报名情况统计》就别留一行全是「—」
+      if (pair[1] === '缴费人数' && !DATA.meta.regDate) return;
       const vals = picked.map(function (r) { return r[pair[1]] || '—'; });
       const allSame = vals.every(function (v) { return v === vals[0]; });
       html += '<tr><th class="rowhead">' + esc(pair[0]) + '</th>';
@@ -1658,7 +1673,7 @@
     s.onerror = function () {
       $('loading').innerHTML = '<p class="loading__title">找不到 data/sy_positions.js</p>' +
         '<p class="loading__hint">先运行：python -I build_sy_data.py ' +
-        '"20日9点】26下四川事业单位岗位汇总表.xlsx"</p>';
+        '"20日17点】26下四川事业单位岗位汇总表.xlsx"</p>';
     };
     document.body.appendChild(s);
     $('loading-hint').textContent = '读取 data/sy_positions.js …';

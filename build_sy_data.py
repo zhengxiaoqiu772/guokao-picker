@@ -3,10 +3,12 @@
 把四川省事业单位岗位汇总表 .xlsx 编译成网页可直接加载的数据文件
 data/sy_positions.js
 
-用法:  python -I build_sy_data.py [岗位表.xlsx ...]
+用法:  python -I build_sy_data.py [岗位表.xlsx ...] [报名情况统计.xls]
 
-不给文件名时优先读当前目录的「20日9点】26下四川事业单位岗位汇总表.xlsx」；
+不给文件名时优先读当前目录的「20日17点】26下四川事业单位岗位汇总表.xlsx」；
 没有这份文件时再扫描目录里表头含「岗位编码 / 招聘范围」的 .xlsx/.xls。
+《报名情况统计》不给时自动用目录里文件名日期最新的一份，按岗位编码把
+「已缴费人数」并成一列。
 
 汇总表一份文件里有 22 个 sheet（省直属 + 21 个市州），每个 sheet 都是
 第 1 行大标题、第 2 行分组标题、第 3 行列名、第 4 行起数据。列数有 29 / 30
@@ -31,11 +33,11 @@ import openpyxl
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from build_sc_data import (  # noqa: E402  两个构建脚本共用同一套专业词表规则
-    common_prefix_len, extract_major, extract_names, flat, header_key,
-    is_lei, load_gk_class_hints,
+    cell_text, common_prefix_len, cutoff_text, extract_major, extract_names,
+    flat, header_key, is_lei, load_gk_class_hints, reg_sheet_rows,
 )
 
-DEFAULT_SOURCE = "20日9点】26下四川事业单位岗位汇总表.xlsx"
+DEFAULT_SOURCE = "20日17点】26下四川事业单位岗位汇总表.xlsx"
 
 # 输出列。前 28 列是原表字段（列名改短、去掉括号说明），后面是派生列。
 # 派生列只为了筛选和判定，卡片上仍显示原文。
@@ -48,6 +50,8 @@ COLUMNS = [
     # ---- 派生 ----
     "岗位类别", "学历要求", "学位要求", "考试科目", "教资要求", "服务期年数",
     "年龄截止", "年龄研究生截止", "年龄可放宽2岁",
+    # 来自另一份《报名情况统计》，按岗位编码并进来；每天一份，见 load_reg_stats
+    "缴费人数",
 ]
 
 DERIVED = set(COLUMNS[28:])
@@ -110,8 +114,17 @@ def clean_major(value):
     if not text:
         return ""
     text = CODE_NOTE_RE.sub(r"（\1）", text)
-    lines = [re.sub(r"[ \t　]+", "、", line.strip())
-             for line in text.split("\n")]
+    lines = []
+    for line in text.split("\n"):
+        line = line.strip()
+        # 空格是专业之间的分隔，换成顿号；但紧挨着标点的空格先去掉，
+        # 否则原表「， 会计学」「、 林学类」会变成「，、会计学」「、、林学类」
+        line = re.sub(r"[ \t　]*([，,；;、：:])[ \t　]*", r"\1", line)
+        line = re.sub(r"[ \t　]+", "、", line)
+        # 有几行折行后以「，」开头（「…（090106）\n，烟草…」），行首标点是多余的，
+        # 去掉，免得卡片上出现「；\n，烟草」
+        line = re.sub(r"^[，,；;、]+", "", line)
+        lines.append(line)
     lines = [line for line in lines if line]
     if not lines:
         return ""
@@ -328,6 +341,67 @@ def discover(base_dir):
     return found
 
 
+def find_reg_file(base_dir):
+    """在项目目录里找最新的一份《报名情况统计》表。
+
+    文件名形如「…报名情况统计（截止11月24日17点）.xls」，按文件名里的
+    截止日期挑最新；文件名里没有日期时退回修改时间。找不到返回 None，
+    构建照常进行，只是没有缴费人数。
+    """
+    best = None
+    for name in os.listdir(base_dir):
+        if not name.lower().endswith((".xls", ".xlsx")):
+            continue
+        # 目录里还有省考的《…公务员…报名人数统计表》，别把它当成事业的
+        if "事业单位" not in name or "报名" not in name or "统计" not in name:
+            continue
+        path = os.path.join(base_dir, name)
+        m = re.search(r"(\d{1,2})月(\d{1,2})日\s*(?:(\d{1,2})[点时])?", name)
+        key = ((int(m.group(1)), int(m.group(2)), int(m.group(3) or 0))
+               if m else (0, 0, 0))
+        key = key + (os.path.getmtime(path),)
+        if best is None or key > best[0]:
+            best = (key, path)
+    return best[1] if best else None
+
+
+def load_reg_stats(path):
+    """读取《报名情况统计》：岗位编码 -> 已缴费人数，以及统计时点。
+
+    表头在第 2 行（第 1 行是大标题），列为：所属省市、所属地市、招录部门、
+    岗位编码、岗位名称、已缴费人数。0 人也要保留——「列了但没人缴」和
+    「统计表里没有这个岗位」是两回事，卡片上分开显示。
+    """
+    paid = {}
+    title = ""
+    for sheet_rows in reg_sheet_rows(path):
+        header_at = None
+        header = None
+        for i, row in enumerate(sheet_rows):
+            vals = [header_key(v) for v in row]
+            if "岗位编码" in vals:
+                header_at, header = i, vals
+                break
+        if header_at is None:
+            if not title and sheet_rows and sheet_rows[0]:
+                title = clean_cell(sheet_rows[0][0])
+            continue
+        ci = header.index("岗位编码")
+        pi = next((i for i, name in enumerate(header) if "缴费" in name), None)
+        if pi is None:
+            continue
+        for row in sheet_rows[header_at + 1:]:
+            if len(row) <= max(ci, pi):
+                continue
+            code = cell_text(row[ci])
+            value = cell_text(row[pi])
+            if code.isdigit() and value.isdigit():
+                paid[code] = value
+
+    name = os.path.basename(path)
+    return paid, cutoff_text(name) or cutoff_text(title)
+
+
 def main():
     if not sys.stdout.isatty():
         try:
@@ -336,12 +410,16 @@ def main():
             pass
 
     if len(sys.argv) > 1:
-        paths = sys.argv[1:]
+        # 第二个参数可以是《报名情况统计》；文件名里带「报名…统计」就认出来
+        paths = [p for p in sys.argv[1:]
+                 if not ("报名" in os.path.basename(p) and "统计" in os.path.basename(p))]
+        reg_args = [p for p in sys.argv[1:] if p not in paths]
     else:
         paths = discover(HERE)
+        reg_args = []
         if not paths:
             print("目录里没找到事业单位岗位表。用法: "
-                  "python -I build_sy_data.py 岗位表.xlsx")
+                  "python -I build_sy_data.py 岗位表.xlsx [报名情况统计.xls]")
             return 1
 
     rows = []
@@ -358,6 +436,23 @@ def main():
     if not rows:
         print("没有读到任何职位，检查表头是否为「岗位编码 / 招聘范围」")
         return 1
+
+    # ---- 缴费人数：按岗位编码从《报名情况统计》并进来 ---------------------
+    reg_path = reg_args[0] if reg_args else find_reg_file(HERE)
+    reg_paid, reg_cutoff = {}, ""
+    if reg_path:
+        if not os.path.exists(reg_path):
+            print("找不到报名情况统计表: %s" % reg_path)
+            return 1
+        reg_paid, reg_cutoff = load_reg_stats(reg_path)
+        print("缴费人数: %s（截至%s）%d 行" % (
+            os.path.basename(reg_path), reg_cutoff or "未知", len(reg_paid)))
+        if not reg_paid:
+            print("!! 统计表里没读到缴费人数，检查表头是否为「岗位编码 / 已缴费人数」")
+    else:
+        print("缴费人数: 目录里没有《报名情况统计》，跳过")
+    for values in rows:
+        values["缴费人数"] = reg_paid.get(values["岗位编码"], "")
 
     # ---- 城市汇总：选择界面按这个渲染 --------------------------------------
     city_map = {}
@@ -453,6 +548,11 @@ def main():
             "sources": [os.path.basename(p) for p in paths],
             "total": len(rows),
             "cities": cities,
+            # 报名情况统计表的截止时点与文件名；没放统计表时为空，页面不显示缴费人数
+            "regDate": reg_cutoff,
+            "regFile": os.path.basename(reg_path) if reg_path else "",
+            "regRows": len(reg_paid),
+            "regTotal": sum(int(v) for v in reg_paid.values()),
         },
         "H": COLUMNS,
         "D": encoded,
@@ -484,6 +584,11 @@ def main():
     print("写出 %s  (%.1f KB)" % (out_path, os.path.getsize(out_path) / 1024.0))
     print("合计 %d 个职位 / %d 人" % (
         len(rows), sum(int(v["招聘名额"] or 0) for v in rows)))
+    if reg_paid:
+        covered = sum(1 for v in rows if v["缴费人数"] != "")
+        print("缴费人数覆盖 %d/%d 个岗位，合计 %d 人（未列 %d 个，教育类单独公布）"
+              % (covered, len(rows), payload["meta"]["regTotal"],
+                 len(rows) - covered))
     for city in cities:
         print("  %s: %d 个职位 / %d 人 / %d 个区县 / %d 个单位" % (
             city["name"], city["count"], city["headcount"],

@@ -739,10 +739,31 @@
       a['招聘单位'].localeCompare(b['招聘单位'], 'zh');
   };
 
+  // 缴费人数是字符串列；统计表里没有的岗位（教育类）当无穷大
+  function paidCount(r) {
+    const v = r['缴费人数'];
+    if (v === '' || v == null) return Infinity;
+    const n = Number(v);
+    return isNaN(n) ? Infinity : n;
+  }
+
+  // 两个方向都把「未统计」放最后：不能只靠 Infinity 相减，反向排序时它会被翻到最前
+  function paidOrder(a, b, desc) {
+    const av = paidCount(a);
+    const bv = paidCount(b);
+    const am = av === Infinity ? 1 : 0;
+    const bm = bv === Infinity ? 1 : 0;
+    if (am || bm) return am - bm;
+    return desc ? bv - av : av - bv;
+  }
+
   const SORTERS = {
     region: byRegion,
     dept: function (a, b) { return a['招聘单位'].localeCompare(b['招聘单位'], 'zh'); },
     headcount: function (a, b) { return b.headcount - a.headcount; },
+    // 同一人数再按县市区排，免得几十个 0 人乱序
+    paid: function (a, b) { return paidOrder(a, b, false) || byRegion(a, b); },
+    paidDesc: function (a, b) { return paidOrder(a, b, true) || byRegion(a, b); },
     code: function (a, b) { return String(a['岗位编码']).localeCompare(String(b['岗位编码'])); },
     tier: function (a, b) { return tierRank(a.tier) - tierRank(b.tier); },
   };
@@ -973,8 +994,8 @@
 
   const CSV_COLUMNS = [
     '岗位编码', '市州', '县市区', '招聘单位', '岗位名称', '岗位类别及等级',
-    '招聘名额', '招聘范围', '学历学位', '专业', '职称资格', '公共科目',
-    '最低服务期', '年龄', '咨询电话', '备注', '匹配档位', '匹配依据',
+    '招聘名额', '缴费人数', '招聘范围', '学历学位', '专业', '职称资格',
+    '公共科目', '最低服务期', '年龄', '咨询电话', '备注', '匹配档位', '匹配依据',
   ];
 
   function toCSV(records) {

@@ -48,9 +48,12 @@ const loadMs = Date.now() - t0;
 
 check('岗位总数', records.length, 7821);
 check('招聘总人数', records.reduce((a, r) => a + r.headcount, 0), 10878);
-check('列数', DATA.H.length, 37);
+check('列数', DATA.H.length, 38);
 check('来源文件', DATA.meta.sources,
-  ['20日9点】26下四川事业单位岗位汇总表.xlsx']);
+  ['20日17点】26下四川事业单位岗位汇总表.xlsx']);
+check('缴费人数统计时点', DATA.meta.regDate, '11月24日17点');
+check('缴费人数覆盖岗位数', records.filter((r) => r['缴费人数'] !== '').length, 5624);
+check('缴费人数合计', records.reduce((a, r) => a + (Number(r['缴费人数']) || 0), 0), 47141);
 check('城市（含省直属）', DATA.meta.cities.length, 22);
 check('区县条目数（按市州分开计）', DATA.counties.length, 202);
 
@@ -365,6 +368,26 @@ check('按招聘名额降序', (() => {
 check('按县市区排序', (() => {
   const list = run({}, { sort: 'region' }).all.map((r) => r['县市区']);
   return list.every((n, i) => i === 0 || list[i - 1].localeCompare(n, 'zh') <= 0);
+})(), true);
+check('按缴费人数升序，未统计排最后', (() => {
+  const list = run({}, { sort: 'paid' }).all.map((r) => r['缴费人数']);
+  return list.every((n, i) => {
+    if (i === 0) return true;
+    const prev = list[i - 1];
+    if (prev === '') return n === '';          // 未统计之后只能还是未统计
+    if (n === '') return true;                 // 数字可以过渡到未统计
+    return Number(prev) <= Number(n);
+  });
+})(), true);
+check('按缴费人数降序，未统计仍排最后', (() => {
+  const list = run({}, { sort: 'paidDesc' }).all.map((r) => r['缴费人数']);
+  return list.every((n, i) => {
+    if (i === 0) return true;
+    const prev = list[i - 1];
+    if (prev === '') return n === '';
+    if (n === '') return true;
+    return Number(prev) >= Number(n);
+  });
 })(), true);
 
 /* =====================================================================
